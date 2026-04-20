@@ -24,7 +24,7 @@ const MobileLayout: React.FC = () => {
       </div>
 
       {/* Content Area */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden relative z-10 scroll-smooth scrollbar-hide">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden relative z-10 scroll-smooth scrollbar-hide pb-20">
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -40,7 +40,7 @@ const MobileLayout: React.FC = () => {
       </main>
 
       {/* Solid Bottom Navigation */}
-      <nav className="flex-shrink-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-3xl border-t border-white/5 pb-safe">
+      <nav className="fixed bottom-0 left-0 w-full z-50 bg-[#0a0a0a]/80 backdrop-blur-3xl border-t border-white/5 pb-safe">
         <div className="w-full flex justify-around items-center h-16 md:hidden">
           {navItems.map(({ path, icon: Icon, label }) => (
             <NavLink
