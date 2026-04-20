@@ -1,0 +1,6 @@
+{
+  "name": "FilmSort: Cinematic Vault",
+  "description": "An immersive, cinematic media hub featuring a specialist glass UI. Securely manage your private film library in a local Vault while syncing metadata for a seamless, device-agnostic personalized hub experience.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
