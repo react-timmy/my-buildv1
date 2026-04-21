@@ -446,7 +446,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
       </section>
 
       {/* Main Hub Content */}
-      <div className="relative z-20 mt-16 md:mt-24 space-y-12 pb-32">
+      <div className="relative z-20 mt-8 md:mt-10 space-y-12 pb-32">
         
         {/* Cinematic Content Rails */}
         <div className="space-y-16">
