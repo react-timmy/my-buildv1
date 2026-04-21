@@ -239,7 +239,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
             animate={{ opacity: 0.65 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 1.5, ease: "easeOut" }}
-            className="absolute top-0 inset-x-0 h-[150vh] z-0 pointer-events-none"
+            className="absolute top-0 inset-x-0 h-[150vh] z-0 pointer-events-none overflow-hidden [mask-image:linear-gradient(to_bottom,white_50%,transparent_100%)]"
           >
              <img
               src={featuredItem.meta.poster || featuredItem.meta.backdrop || `https://picsum.photos/seed/${featuredItem.id}/400/600`}
@@ -247,8 +247,6 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
               alt=""
               referrerPolicy="no-referrer"
             />
-            {/* The gradient choke is reversed here to let light bleed out behind the UI */}
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#050505]/70 to-[#050505]" />
           </motion.div>
         ) : (
           <div className="absolute top-0 inset-x-0 h-[150vh] bg-zinc-900 animate-pulse z-0 pointer-events-none" />
@@ -350,7 +348,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.8 }}
-            className="relative z-10 w-full max-w-[440px] md:max-w-4xl aspect-[3/4] md:aspect-video rounded-3xl md:rounded-[3rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.4)] border border-white/10 mt-2 pointer-events-auto flex flex-col justify-end"
+            className="relative z-10 w-full max-w-[440px] md:max-w-[94vw] 2xl:max-w-[1600px] aspect-[3/4] md:aspect-video lg:aspect-[21/9] rounded-3xl md:rounded-[3rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.4)] border border-white/10 mt-2 pointer-events-auto flex flex-col justify-end"
             onClick={() => setSelectedItem(featuredItem)}
           >
             {/* The sharp poster background inside the card */}
