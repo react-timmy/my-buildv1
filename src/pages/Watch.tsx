@@ -160,10 +160,10 @@ export default function Watch() {
           }
 
           // Error handling
-          const status = item.status === 'processing' 
-            ? "Sync in Progress: Your media is currently being analyzed. Please wait a moment." 
-            : "Video File Missing: This item is synced to your Cloud Library, but the physical video file has not been uploaded to this specific device's secure Vault.";
-          throw new Error(status);
+          const errorMsg = item.status === 'processing' 
+            ? "Collection in Sync: Your media is currently being analyzed and identified by the AI. This usually takes less than 30 seconds." 
+            : "Device Link Not Found: This movie is in your cloud library, but it hasn't been linked on this specific device yet. Click the button below to point FilmSort to the file on your local drive.";
+          throw new Error(errorMsg);
         } else {
           // Standard TMDB logic
           const endpoint = type === 'tv' ? `/tmdb/tv/${activeMovieId}` : `/tmdb/movie/${activeMovieId}`;
@@ -534,18 +534,18 @@ export default function Watch() {
                 <Unlock className="w-4 h-4" />
                 Unlock Access
              </button>
-          ) : isMissing && (
+          ) : (
             <button 
               onClick={async () => {
                 const success = await relinkItem(movieId!);
                 if (success) {
-                  window.location.reload(); // Hard reload to restart the player state
+                  window.location.reload(); 
                 }
               }}
-              className="px-10 py-4 bg-brand-blue text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[0_0_30px_rgba(0,186,255,0.3)] hover:shadow-[0_0_50px_rgba(0,186,255,0.5)] active:scale-95 transition-all flex items-center gap-3"
+              className="px-10 py-4 bg-brand-orange text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[0_0_30px_rgba(255,107,0,0.3)] hover:shadow-[0_0_50px_rgba(255,107,0,0.5)] active:scale-95 transition-all flex items-center gap-3"
             >
-              <HardDrive className="w-4 h-4" />
-              Re-upload & Play
+              <ScanLine className="w-4 h-4" />
+              Link Local File & Play
             </button>
           )}
         </div>

@@ -801,21 +801,14 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const file = await handle.getFile();
       
-      // Safety: check if filename matches or ask user to confirm? 
-      // User said "reupload it to their private storage then it should resynchronize".
-      // We'll trust the user picks the right file, but we should update the filename in metadata if it's different?
-      // Actually, let's keep the metadata and update the physical file.
-      
-      setIsVaulting(true);
-      await saveFileToVault(file);
-      setIsVaulting(false);
+      // THE FIX: Save as a Phantom Handle (Pointer), NOT to the Vault.
+      await saveHandle(id, handle);
       
       setLibrary(prev => prev.map(p => 
-        p.id === id ? { ...p, status: 'ready', filename: file.name } : p
+        p.id === id ? { ...p, status: 'ready', filename: file.name, size: file.size } : p
       ));
       
-      refreshVaultStats();
-      addToast(`${item.meta.cleanTitle} successfully relinked`, 'success');
+      addToast(`${item.meta.cleanTitle} successfully linked locally!`, 'success');
       return true;
     } catch (err: any) {
       if (err.name !== 'AbortError') {
@@ -824,7 +817,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       return false;
     }
-  }, [library, refreshVaultStats]);
+  }, [library]);
 
   const removeItems = async (ids: string[]) => {
     const itemsToRemove = library.filter(item => ids.includes(item.id));

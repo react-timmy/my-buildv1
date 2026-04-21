@@ -239,7 +239,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
             animate={{ opacity: 0.65 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 1.5, ease: "easeOut" }}
-            className="absolute top-0 inset-x-0 h-[150vh] z-0 pointer-events-none overflow-hidden [mask-image:linear-gradient(to_bottom,white_50%,transparent_100%)]"
+            className="absolute top-0 inset-x-0 h-[120vh] z-0 pointer-events-none overflow-hidden"
           >
              <img
               src={featuredItem.meta.poster || featuredItem.meta.backdrop || `https://picsum.photos/seed/${featuredItem.id}/400/600`}
@@ -247,9 +247,11 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
               alt=""
               referrerPolicy="no-referrer"
             />
+            {/* The atmospheric bleed fade - ensures smooth transition to rows */}
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#050505]/70 to-[#050505] z-[1]" />
           </motion.div>
         ) : (
-          <div className="absolute top-0 inset-x-0 h-[150vh] bg-zinc-900 animate-pulse z-0 pointer-events-none" />
+          <div className="absolute top-0 inset-x-0 h-[100vh] bg-zinc-900 animate-pulse z-0 pointer-events-none" />
         )}
       </AnimatePresence>
 
@@ -261,7 +263,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
       )}
 
       {/* Cinematic Hero Stage */}
-      <section className="sticky top-0 w-full flex flex-col items-center justify-start z-0 pt-20 px-5 transition-all">
+      <section className="relative w-full flex flex-col items-center justify-start z-10 pt-20 px-5 transition-all">
         {/* Top Header Spot */}
         <div className="absolute top-8 left-5 md:left-7 z-50 scale-[1.5] md:scale-[2.0] origin-top-left pointer-events-auto hidden md:block">
             <FilmSortLogo onClick={() => navigate('/browse')} />
