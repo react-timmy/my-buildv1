@@ -263,7 +263,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
       )}
 
       {/* Cinematic Hero Stage */}
-      <section className="relative w-full flex flex-col items-center justify-start z-10 pt-20 px-5 transition-all">
+      <section className="relative w-full flex flex-col items-center justify-start z-10 pt-20 px-2 md:px-4 transition-all">
         {/* Top Header Spot */}
         <div className="absolute top-8 left-5 md:left-7 z-50 scale-[1.5] md:scale-[2.0] origin-top-left pointer-events-auto hidden md:block">
             <FilmSortLogo onClick={() => navigate('/browse')} />
@@ -350,7 +350,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.8 }}
-            className="relative z-10 w-full max-w-[440px] md:max-w-[94vw] 2xl:max-w-[1600px] aspect-[3/4] md:aspect-video lg:aspect-[21/9] rounded-3xl md:rounded-[3rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.4)] border border-white/10 mt-2 pointer-events-auto flex flex-col justify-end"
+            className="relative z-10 w-[96vw] md:w-[94vw] 2xl:max-w-[1600px] aspect-[3/4] md:aspect-video lg:aspect-[21/9] rounded-3xl md:rounded-[3rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.4)] border border-white/10 mt-2 pointer-events-auto flex flex-col justify-end"
             onClick={() => setSelectedItem(featuredItem)}
           >
             {/* The sharp poster background inside the card */}

@@ -69,7 +69,7 @@ export async function clearHandles(): Promise<void> {
  * Checks if we have read permission for a handle.
  */
 export async function verifyPermission(handle: FileSystemFileHandle, withRequest = false): Promise<boolean> {
-  const options: FileSystemHandlePermissionDescriptor = { mode: 'read' };
+  const options: any = { mode: 'read' };
   
   // Check if we already have permission
   if ((await (handle as any).queryPermission(options)) === 'granted') {
