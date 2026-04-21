@@ -376,6 +376,21 @@ const Library: React.FC = () => {
                               New
                             </div>
                           )}
+                          {item.id.includes('tmdb_') && (
+                            <div className="absolute top-3 left-3 z-30 pointer-events-none">
+                              <div className="px-2 py-0.5 bg-brand-blue text-white text-[8px] font-black uppercase tracking-widest rounded shadow-lg shadow-brand-blue/20">
+                                Discovery
+                              </div>
+                            </div>
+                          )}
+                          {item.status === 'missing' && (
+                            <div className="absolute top-3 right-3 z-30 pointer-events-none">
+                              <div className="px-2 py-0.5 bg-red-500 text-white text-[8px] font-black uppercase tracking-widest rounded shadow-lg shadow-red-500/20 flex items-center gap-1.5">
+                                <HardDrive className="w-2.5 h-2.5" />
+                                Relink
+                              </div>
+                            </div>
+                          )}
                           {item.meta.rating && (
                             <div className="ml-auto px-1.5 py-0.5 glass-card border-white/10 rounded flex items-center gap-1">
                               <Star className="w-2.5 h-2.5 text-brand-orange fill-brand-orange" />
@@ -440,6 +455,14 @@ const Library: React.FC = () => {
                             Series
                           </div>
                         </div>
+                        {item.status === 'missing' && (
+                            <div className="absolute top-3 right-3 z-30 pointer-events-none">
+                              <div className="px-2 py-0.5 bg-red-500 text-white text-[8px] font-black uppercase tracking-widest rounded shadow-lg shadow-red-500/20 flex items-center gap-1.5">
+                                <HardDrive className="w-2.5 h-2.5" />
+                                Relink
+                              </div>
+                            </div>
+                        )}
 
                         <img 
                           src={item.meta.poster || `https://picsum.photos/seed/${item.id}/400/600`} 
@@ -514,7 +537,7 @@ const Library: React.FC = () => {
               <p className="text-white/40 text-sm mb-10 leading-relaxed">
                 {selectedForDeletion.length > 0 
                   ? `You are about to permanently remove ${selectedForDeletion.length} items from your library.` 
-                  : "This will permanently delete your library records. Your actual video files on this device will not be deleted."}
+                  : "This will permanently delete your library records and all local video files. This action cannot be undone."}
               </p>
               <div className="flex flex-col gap-3">
                 <button 

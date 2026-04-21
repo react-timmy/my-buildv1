@@ -5,20 +5,26 @@ import { useLibrary } from '../context/LibraryContext';
 import { useAuth } from '../context/AuthContext';
 import { LibraryItem } from '../services/libraryService';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutGrid, Loader, Plus, ChevronDown, Play as PlayIcon, Search, Info, Star, ChevronRight } from 'lucide-react';
+import { LayoutGrid, Loader, Plus, ChevronDown, Play as PlayIcon, Search, Info, Star, ChevronRight, Check } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from '../lib/axios';
 import FilmSortLogo from '../components/FilmSortLogo';
 
 export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv' | 'latest' }) {
   const [selectedItem, setSelectedItem] = useState<LibraryItem | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'series' | 'movie'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'series' | 'movie'>(type === 'tv' ? 'series' : type === 'movie' ? 'movie' : 'all');
+  
+  useEffect(() => {
+    setActiveTab(type === 'tv' ? 'series' : type === 'movie' ? 'movie' : 'all');
+  }, [type]);
+
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [maturityRating, setMaturityRating] = useState<string | null>(null);
   const [userScore, setUserScore] = useState<number | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoFetchFinished, setLogoFetchFinished] = useState(false);
   const [textlessPosterUrl, setTextlessPosterUrl] = useState<string | null>(null);
   const [trendingData, setTrendingData] = useState<any[]>([]);
   const [heroIndex, setHeroIndex] = useState(0);
@@ -71,7 +77,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
     if (heroItems.length === 0) return null;
     const item = heroItems[heroIndex % heroItems.length];
     
-    // Attach dynamic ranking from trending data
+    // Attach dynamic ranking from trending data using strict realism
     const data = Array.isArray(trendingData) ? trendingData : [];
     const trend = data.find(t => t.tmdbId === item.meta.tmdbId);
     
@@ -79,9 +85,8 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
       return { ...item, meta: { ...item.meta, ranking: trend.rank } };
     }
     
-    // Fallback: If not in global TOP 10, calculate a stable library-specific rank (1-10)
-    const stableRank = (item.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 10) + 1;
-    return { ...item, meta: { ...item.meta, ranking: stableRank } };
+    // Strict Realism: If it's not trending globally today, don't show a ranking!
+    return item;
   }, [heroItems, heroIndex, trendingData]);
 
   // Auto-cycle the hero section Every 10 seconds
@@ -100,6 +105,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
       const fetchExtraData = async () => {
         // Clear previous state to avoid flickering or stale info
         setLogoUrl(null);
+        setLogoFetchFinished(false);
         setTextlessPosterUrl(null);
         setMaturityRating(null);
         setUserScore(null);
@@ -112,6 +118,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
           setUserScore(res.data.vote_average);
           const logo = res.data.images?.logos?.find((l: any) => l.iso_639_1 === 'en') || res.data.images?.logos?.[0];
           setLogoUrl(logo ? `https://image.tmdb.org/t/p/w500${logo.file_path}` : null);
+          setLogoFetchFinished(true);
 
           // Find a textless poster (no language specified) for mobile hero display
           const tPoster = res.data.images?.posters?.find((p: any) => !p.iso_639_1 || p.iso_639_1 === 'xx');
@@ -128,6 +135,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
         } catch (e) {
           console.error("Failed to fetch extra data", e);
           setMaturityRating('NR');
+          setLogoFetchFinished(true);
         }
       };
       fetchExtraData();
@@ -220,7 +228,33 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white selection:bg-brand-orange/30 scrollbar-hide pb-20 overflow-x-hidden">
+    <div className="min-h-screen bg-[#050505] text-white selection:bg-brand-orange/30 scrollbar-hide pb-20 overflow-x-hidden relative">
+      
+      {/* Ambient "Leaking" Background (Moved to root to bleed down) */}
+      <AnimatePresence mode="wait">
+        {featuredItem ? (
+           <motion.div
+            key={`ambient-root-${featuredItem.id}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.65 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.5, ease: "easeOut" }}
+            className="absolute top-0 inset-x-0 h-[150vh] z-0 pointer-events-none"
+          >
+             <img
+              src={featuredItem.meta.poster || featuredItem.meta.backdrop || `https://picsum.photos/seed/${featuredItem.id}/400/600`}
+              className="w-full h-full object-cover object-top absolute inset-0 blur-[100px] saturate-200"
+              alt=""
+              referrerPolicy="no-referrer"
+            />
+            {/* The gradient choke is reversed here to let light bleed out behind the UI */}
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#050505]/70 to-[#050505]" />
+          </motion.div>
+        ) : (
+          <div className="absolute top-0 inset-x-0 h-[150vh] bg-zinc-900 animate-pulse z-0 pointer-events-none" />
+        )}
+      </AnimatePresence>
+
       {selectedItem && (
         <LibraryModal 
           item={selectedItem} 
@@ -229,75 +263,120 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
       )}
 
       {/* Cinematic Hero Stage */}
-      <section className="relative w-full h-[90vh] md:h-screen flex items-center justify-center overflow-hidden">
+      <section className="sticky top-0 w-full min-h-[90vh] flex flex-col items-center justify-start z-0 pt-24 px-5">
         {/* Top Header Spot */}
-        <div className="absolute top-8 inset-x-0 px-6 md:px-12 flex items-center justify-between z-50">
-          <div className="scale-[1.5] md:scale-[2.0] origin-top-left drop-shadow-[0_0_20px_rgba(0,0,0,0.8)] px-2 pointer-events-auto">
+        <div className="absolute top-8 left-5 md:left-7 z-50 scale-[1.5] md:scale-[2.0] origin-top-left pointer-events-auto hidden md:block">
             <FilmSortLogo onClick={() => navigate('/browse')} />
-          </div>
+        </div>
+        <div className="absolute top-8 left-5 md:left-7 z-50 scale-[1.5] md:scale-[2.0] origin-top-left pointer-events-auto md:hidden">
+            <FilmSortLogo onClick={() => navigate('/browse')} />
+        </div>
+        
+        <div className="absolute top-8 right-2 md:right-4 z-50 flex items-center gap-3 md:gap-4">
           
-          <div className="flex items-center">
+          {/* Browse Dropdown */}
+          <div className="relative" ref={dropdownRef}>
             <button 
-              onClick={() => navigate('/search')}
-              className="w-12 h-12 glass-card rounded-full flex items-center justify-center transition-all border-white/10 hover:border-brand-blue/30 group"
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className="px-4 py-2.5 h-12 glass-card rounded-full flex items-center justify-center gap-2 transition-all border border-white/10 hover:border-brand-blue/30 group bg-black/40 hover:bg-black/60 shadow-lg text-sm font-semibold"
             >
-              <Search className="w-5 h-5 text-white/70 group-hover:text-brand-blue transition-colors" />
+              <span className="opacity-90 group-hover:opacity-100">Browse</span>
+              <ChevronDown className={`w-4 h-4 opacity-70 group-hover:opacity-100 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
+
+            <AnimatePresence>
+              {isDropdownOpen && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute top-full right-0 mt-3 w-64 glass-card border border-white/10 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] overflow-hidden backdrop-blur-2xl flex flex-col z-[100]"
+                >
+                  <div className="p-2 space-y-1">
+                    <button 
+                      onClick={() => { setActiveTab('all'); setSelectedCategory(null); setIsDropdownOpen(false); }}
+                      className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${activeTab === 'all' && !selectedCategory ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`}
+                    >
+                      Home
+                    </button>
+                    <button 
+                      onClick={() => { setActiveTab('series'); setSelectedCategory(null); setIsDropdownOpen(false); }}
+                      className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${activeTab === 'series' && !selectedCategory ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`}
+                    >
+                      TV Shows
+                    </button>
+                    <button 
+                      onClick={() => { setActiveTab('movie'); setSelectedCategory(null); setIsDropdownOpen(false); }}
+                      className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${activeTab === 'movie' && !selectedCategory ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`}
+                    >
+                      Movies
+                    </button>
+                  </div>
+                  
+                  <div className="h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent mx-4" />
+                  
+                  <div className="p-2 max-h-[300px] overflow-y-auto scrollbar-hide">
+                    <div className="px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Categories</div>
+                    {availableGenres.map(genre => (
+                      <button 
+                        key={genre}
+                        onClick={() => { setSelectedCategory(genre); setIsDropdownOpen(false); }}
+                        className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-colors ${selectedCategory === genre ? 'text-brand-orange font-bold bg-brand-orange/10' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
+                      >
+                        {genre}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+
+          {/* Search Button */}
+          <button 
+            onClick={() => navigate('/search')}
+            className="w-12 h-12 glass-card rounded-full flex items-center justify-center transition-all border border-white/10 hover:border-brand-blue/30 group bg-black/40 hover:bg-black/60 shadow-lg"
+          >
+            <Search className="w-5 h-5 text-white/70 group-hover:text-brand-blue transition-colors" />
+          </button>
         </div>
 
-        {/* Background Artwork */}
+        {/* The Card Box (Hero Content) */}
         <AnimatePresence mode="wait">
-          {featuredItem ? (
-             <motion.div
-              key={featuredItem.id}
-              initial={{ opacity: 0, scale: 1.1 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.5, ease: "easeOut" }}
-              className="absolute inset-0 z-0"
-            >
-               {/* Mobile/Portrait Image: Textless Poster or Standard Poster */}
-               <img
-                src={textlessPosterUrl || featuredItem.meta.poster || featuredItem.meta.backdrop || `https://picsum.photos/seed/${featuredItem.id}/400/600`}
-                className="w-full h-full object-cover object-top md:hidden block"
-                alt={featuredItem.meta.cleanTitle}
-                referrerPolicy="no-referrer"
-              />
-              {/* Desktop/Landscape Image: Backdrop */}
-               <img
-                src={featuredItem.meta.backdrop || featuredItem.meta.poster || `https://picsum.photos/seed/${featuredItem.id}/400/600`}
-                className="w-full h-full object-cover object-[center_15%] hidden md:block"
-                alt={featuredItem.meta.cleanTitle}
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent" />
-              <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/60 to-transparent" />
-            </motion.div>
-          ) : (
-            <div className="absolute inset-0 bg-zinc-900 animate-pulse" />
-          )}
-        </AnimatePresence>
-
-        {/* Hero Content */}
         {featuredItem && (
-          <div className="relative z-10 w-full max-w-7xl mx-auto px-6 md:px-12 flex flex-col items-start translate-y-12">
-            <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.5, duration: 0.8 }}
-              className="max-w-2xl"
-            >
-              <div className="flex items-center gap-4 mb-6">
+          <motion.div
+            key={`card-${featuredItem.id}`}
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.8 }}
+            className="relative z-10 w-full max-w-[440px] md:max-w-4xl aspect-[3/4] md:aspect-video rounded-3xl md:rounded-[3rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.4)] border border-white/10 mt-2 pointer-events-auto flex flex-col justify-end"
+            onClick={() => setSelectedItem(featuredItem)}
+          >
+            {/* The sharp poster background inside the card */}
+            <img
+              src={featuredItem.meta.poster || featuredItem.meta.backdrop || `https://picsum.photos/seed/${featuredItem.id}/400/600`}
+              className="w-full h-full object-cover object-center absolute inset-0 z-0"
+              alt={featuredItem.meta.cleanTitle}
+              referrerPolicy="no-referrer"
+            />
+            
+            {/* Internal Bottom Gradient over the sharp image */}
+            <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent z-[1]" />
+            <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/60 to-transparent z-[1]" />
+            
+            <div className="relative z-10 w-full px-6 py-8 md:p-12 flex flex-col items-center text-center">
+              {/* Top Badges (Top 10 & Rating) */}
+              <div className="flex flex-wrap items-center justify-center gap-4 mb-4 md:mb-6">
                  {featuredItem.meta.ranking && featuredItem.meta.ranking <= 10 && (
                    <div className="flex items-center gap-2">
                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white text-black font-black text-xl shadow-[0_0_20px_rgba(255,255,255,0.4)]">
                         {featuredItem.meta.ranking}
                      </div>
-                     <span className="text-xs font-black uppercase tracking-[0.2em] text-white">Top 10 Today</span>
+                     <span className="text-xs font-black uppercase tracking-[0.2em] text-white drop-shadow-md">Top 10 Today</span>
                    </div>
                  )}
-                 <div className="px-3 py-1 rounded-full glass-card border-brand-orange/30 flex items-center gap-3">
+                 <div className="px-3 py-1 rounded-full glass-card border-brand-orange/30 flex items-center gap-3 backdrop-blur-md shadow-lg shadow-black/20">
                     <div className="flex items-center gap-1.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-brand-orange animate-pulse" />
                       <span className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-orange">Global Rating</span>
@@ -313,47 +392,61 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
                  </div>
               </div>
 
+              {/* Main Logo Layer */}
               {logoUrl ? (
-                <div className="relative group">
+                <div className="relative group flex justify-center w-full">
                   <img 
                     src={logoUrl} 
                     alt={featuredItem.meta.cleanTitle} 
-                    className="max-h-32 md:max-h-56 object-contain drop-shadow-[0_0_30px_rgba(0,0,0,0.5)] mb-10 -ml-1 transition-all duration-1000 ease-out hover:scale-[1.02]" 
+                    className="max-h-24 md:max-h-48 object-contain drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] mb-4 md:mb-6 transition-all duration-1000 ease-out hover:scale-[1.02]" 
+                    referrerPolicy="no-referrer"
                   />
                   <div className="absolute -inset-4 bg-brand-orange/5 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                 </div>
               ) : (
-                <h1 className="text-6xl md:text-8xl font-black tracking-tighter mb-8 drop-shadow-2xl">
+                <h1 className="text-4xl md:text-6xl font-black tracking-tighter mb-4 md:mb-6 drop-shadow-[0_0_20px_rgba(0,0,0,0.8)] text-white line-clamp-2">
                   {featuredItem.meta.cleanTitle}
                 </h1>
               )}
 
-              <p className="text-sm md:text-lg text-white/70 max-w-lg mb-10 line-clamp-3 leading-relaxed font-medium drop-shadow-lg">
-                {featuredItem.meta.overview || "An immersive masterpiece from your collection."}
-              </p>
+              {/* Tags / Genres below logo (Bullet Separated) */}
+              <div className="flex flex-wrap items-center justify-center gap-1 md:gap-3 text-[10px] md:text-sm text-white/90 font-medium drop-shadow-lg mb-6 max-w-xl">
+                {(featuredItem.meta.genres?.length 
+                    ? featuredItem.meta.genres 
+                    : ['Cinematic', 'Blockbuster', 'Immersive', 'Epic']
+                  ).slice(0, 5).map((genre: string, idx: number, arr: string[]) => (
+                  <React.Fragment key={genre}>
+                    <span className="text-white drop-shadow-md">{genre}</span>
+                    {idx < arr.length - 1 && <span className="text-white/40 px-1">•</span>}
+                  </React.Fragment>
+                ))}
+              </div>
 
-              <div className="flex items-center gap-4">
+              {/* Action Buttons */}
+              <div className="flex flex-row items-center justify-center gap-3 md:gap-4 w-full">
                 <button
                   onClick={() => playItem(featuredItem.id, navigate)}
-                  className="px-10 py-4 bg-brand-orange text-white rounded-full font-black uppercase text-xs tracking-[0.2em] shadow-[0_0_40px_rgba(255,107,0,0.4)] hover:shadow-[0_0_60px_rgba(255,107,0,0.6)] hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+                  className="flex-1 py-3 md:py-4 bg-brand-orange text-white rounded-md font-semibold text-base md:text-lg shadow-xl hover:bg-brand-orange/90 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
                 >
-                  <PlayIcon className="w-5 h-5 fill-white" />
-                  Play Now
+                  <PlayIcon className="w-5 h-5 md:w-6 md:h-6 fill-white" />
+                  Play
                 </button>
                 <button
                   onClick={() => setSelectedItem(featuredItem)}
-                  className="w-14 h-14 glass-card rounded-full flex items-center justify-center hover:bg-white/10 transition-all border-white/20 group"
+                  className="flex-1 py-3 md:py-4 bg-[#333333]/80 backdrop-blur-md text-white rounded-md font-semibold text-base md:text-lg hover:bg-[#444444]/80 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 shadow-xl"
                 >
-                  <Info className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                  <Info className="w-5 h-5 md:w-6 md:h-6" />
+                  More Info
                 </button>
               </div>
-            </motion.div>
-          </div>
+            </div>
+          </motion.div>
         )}
+        </AnimatePresence>
       </section>
 
       {/* Main Hub Content */}
-      <div className="relative z-20 -mt-24 space-y-12 pb-32">
+      <div className="relative z-20 mt-16 md:mt-24 space-y-12 pb-32">
         
         {/* Cinematic Content Rails */}
         <div className="space-y-16">

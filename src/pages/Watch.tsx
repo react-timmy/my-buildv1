@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Play, Pause, RotateCcw, RotateCw, 
   Volume2, VolumeX, Maximize, Minimize, Layers,
-  MessageSquare, SkipForward, Loader, ChevronRight, AlertCircle
+  MessageSquare, SkipForward, Loader, ChevronRight, AlertCircle, HardDrive,
+  Lock, Unlock, Gauge, ScanLine
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from '../lib/axios';
@@ -13,7 +14,7 @@ import { useAuth } from '../context/AuthContext';
 export default function Watch() {
   const { type, movieId } = useParams<{ type: string; movieId: string }>();
   const navigate = useNavigate();
-  const { library, updateProgress, getFile, needsRelink, relinkLibrary } = useLibrary();
+  const { library, updateProgress, getFile, relinkItem, addToast } = useLibrary();
   const { user } = useAuth();
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -32,9 +33,90 @@ export default function Watch() {
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-
+  const [isLocked, setIsLocked] = useState(false);
+  const [isCover, setIsCover] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const [showAutoPlay, setShowAutoPlay] = useState(false);
+
+  // Gesture State
+  const [videoContrast, setVideoContrast] = useState(100);
+  const [activeGesture, setActiveGesture] = useState<'volume' | 'contrast' | null>(null);
+  const [gestureValue, setGestureValue] = useState(0);
+
+  const lastTapTime = useRef(0);
+  const tapTimeout = useRef<any>(null);
+  const startY = useRef(0);
+  const currentDragType = useRef<'volume' | 'contrast' | null>(null);
+  const startVal = useRef(0);
   
+  // ── Gestures ──────────────────────────────────────────────────────────
+  const handlePointerDown = (e: React.PointerEvent, region: 'left' | 'center' | 'right') => {
+    startY.current = e.clientY;
+    if (region === 'right') {
+      currentDragType.current = 'volume';
+      startVal.current = videoRef.current ? videoRef.current.volume * 100 : 100;
+    } else if (region === 'left') {
+      currentDragType.current = 'contrast';
+      startVal.current = videoContrast;
+    } else {
+      currentDragType.current = null;
+    }
+
+    const now = Date.now();
+    if (now - lastTapTime.current < 250) {
+      // Double tap confirmed
+      clearTimeout(tapTimeout.current);
+      lastTapTime.current = 0;
+      if (region === 'left') skip(-10);
+      else if (region === 'right') skip(10);
+    } else {
+      lastTapTime.current = now;
+      tapTimeout.current = setTimeout(() => {
+        if (lastTapTime.current === now && !activeGesture) {
+          togglePlay();
+        }
+      }, 250);
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!currentDragType.current) return;
+    if (e.pointerType === 'mouse' && e.buttons !== 1) return; // Only process drag when mouse is held down
+
+    const deltaY = startY.current - e.clientY;
+    if (Math.abs(deltaY) > 15) {
+      // Drag detected, cancel any single click action
+      lastTapTime.current = 0;
+      clearTimeout(tapTimeout.current);
+
+      const type = currentDragType.current;
+      setActiveGesture(type);
+
+      const change = deltaY * 0.4;
+      if (type === 'volume') {
+        let newVal = startVal.current + change;
+        newVal = Math.max(0, Math.min(100, newVal));
+        if (videoRef.current) {
+          videoRef.current.volume = newVal / 100;
+          setIsMuted(newVal === 0);
+        }
+        setGestureValue(newVal);
+      } else if (type === 'contrast') {
+        let newVal = startVal.current + change;
+        newVal = Math.max(20, Math.min(200, newVal));
+        setVideoContrast(newVal);
+        setGestureValue(((newVal - 20) / 180) * 100);
+      }
+    }
+  };
+
+  const handlePointerUp = () => {
+    currentDragType.current = null;
+    setTimeout(() => {
+      setActiveGesture(prev => prev === activeGesture ? null : prev);
+    }, 800);
+  };
+
   // ── Resource Management ───────────────────────────────────────────────
   useEffect(() => {
     const activeMovieId = movieId;
@@ -107,11 +189,16 @@ export default function Watch() {
     }
     // intentionally omitted 'library' and 'getFile' to stop the video player from reloading every 5 seconds when progress updates!
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movieId, type, needsRelink]); 
+  }, [movieId, type]); 
 
   // ... rest of the component
 
-  const lastTimeRef = useRef<number>(0);
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
+
 
   // ── Subtitle Parser (SRT -> VTT) ──────────────────────────────────────────
   const parseSrtToVtt = (srtContent: string) => {
@@ -380,6 +467,9 @@ export default function Watch() {
   }
 
   if (error) {
+    const item = library.find(li => li.id === movieId);
+    const isMissing = item?.status === 'missing';
+
     return (
       <div className="h-screen w-screen bg-black flex flex-col items-center justify-center p-8 text-center text-white">
         <AlertCircle className="w-16 h-16 text-[#e50914] mb-4" />
@@ -394,12 +484,18 @@ export default function Watch() {
             Go Back
           </button>
           
-          {(error.includes("re-link") || needsRelink) && (
+          {isMissing && (
             <button 
-              onClick={relinkLibrary}
-              className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-indigo-500 transition shadow-[0_0_20px_rgba(79,70,229,0.3)]"
+              onClick={async () => {
+                const success = await relinkItem(movieId!);
+                if (success) {
+                  window.location.reload(); // Hard reload to restart the player state
+                }
+              }}
+              className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-indigo-500 transition shadow-[0_0_20px_rgba(79,70,229,0.3)] flex items-center gap-2"
             >
-              Relink & Play
+              <HardDrive className="w-5 h-5" />
+              Re-upload & Play
             </button>
           )}
         </div>
@@ -425,7 +521,7 @@ export default function Watch() {
       <video
         ref={videoRef}
         src={videoSrc || ''}
-        className="h-full w-full object-contain cursor-none"
+        className={`h-full w-full ${isCover ? 'object-cover' : 'object-contain'} cursor-none`}
         autoPlay
         muted={isMuted}
         onTimeUpdate={handleTimeUpdate}
@@ -433,7 +529,7 @@ export default function Watch() {
         onPlay={() => setIsPlaying(true)}
         onPause={handlePause}
         onEnded={handleVideoEnded}
-        onClick={togglePlay}
+        onClick={undefined} // handled mathematically by pointer events up top now
         onError={() => {
           console.error("Video Playback Error for source:", videoSrc);
           if (videoSrc?.includes('/api/drive/stream')) {
@@ -442,7 +538,10 @@ export default function Watch() {
             setError("The video element has no supported sources or the file is corrupt. Please check if your browser supports this video format.");
           }
         }}
-        style={{ cursor: showControls ? 'default' : 'none' }}
+        style={{ 
+          cursor: showControls ? 'default' : 'none',
+          filter: `contrast(${videoContrast}%)`
+        }}
       >
         {subtitleSrc && (
           <track 
@@ -454,6 +553,53 @@ export default function Watch() {
           />
         )}
       </video>
+
+      {/* Gesture Interaction Zones */}
+      {!isLocked && (
+        <div className="absolute inset-0 z-5 flex" style={{ touchAction: 'none' }}>
+          <div 
+            className="flex-1" 
+            onPointerDown={(e) => handlePointerDown(e, 'left')}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          />
+          <div 
+            className="flex-1" 
+            onPointerDown={(e) => handlePointerDown(e, 'center')}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          />
+          <div 
+            className="flex-1" 
+            onPointerDown={(e) => handlePointerDown(e, 'right')}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          />
+        </div>
+      )}
+
+      {/* Visual Gesture UI */}
+      <AnimatePresence>
+        {activeGesture && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/60 backdrop-blur-md rounded-2xl p-4 flex flex-col items-center gap-4 z-50 pointer-events-none"
+          >
+            <span className="text-white text-xs font-bold uppercase tracking-widest">{activeGesture === 'volume' ? 'Volume' : 'Contrast'}</span>
+            <div className="w-2 h-32 bg-white/20 rounded-full overflow-hidden flex flex-col justify-end">
+              <div 
+                className="w-full bg-brand-orange transition-all duration-75"
+                style={{ height: `${gestureValue}%` }}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Auto-Play Next Episode Overlay */}
       <AnimatePresence>
@@ -508,119 +654,144 @@ export default function Watch() {
             className="absolute inset-0 z-10 flex flex-col justify-between"
           >
             {/* Top Bar - Glassmorphism */}
-            <div className="flex items-center gap-6 px-4 md:px-12 pt-12 pb-24 bg-gradient-to-b from-black/90 via-black/40 to-transparent">
+            <div className={`flex items-center gap-6 px-4 md:px-12 pt-12 pb-24 bg-gradient-to-b from-black/90 via-black/40 to-transparent ${isLocked ? 'justify-start' : ''}`}>
               <button 
                 onClick={handleBack}
-                className="text-white hover:scale-110 transition p-2 bg-white/10 rounded-full hover:bg-white/20"
+                className={`text-white hover:scale-110 transition p-2 bg-white/10 rounded-full hover:bg-white/20 ${isLocked ? 'hidden' : ''}`}
               >
                 <ArrowLeft className="w-8 h-8 md:w-10 md:h-10" />
               </button>
-              <div className="flex flex-col flex-1 min-w-0">
-                <h1 className="text-white text-2xl md:text-3xl font-bold truncate tracking-tight">{title}</h1>
-                <p className="text-gray-300 text-xs md:text-sm font-medium uppercase tracking-[0.2em] opacity-70">{subtitle}</p>
-              </div>
-            </div>
+              
+              <button 
+                 onClick={() => setIsLocked(!isLocked)}
+                 className="text-white hover:scale-110 transition p-2 bg-white/10 rounded-full hover:bg-white/20 relative z-20 pointer-events-auto"
+              >
+                 {isLocked ? <Lock className="w-8 h-8 md:w-10 md:h-10 text-brand-orange" /> : <Unlock className="w-8 h-8 md:w-10 md:h-10" />}
+              </button>
 
-            {/* Center HUD - Premium Interactive Feedback */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="flex items-center justify-center gap-12 md:gap-32 pointer-events-auto">
-                <button 
-                  onClick={() => skip(-10)}
-                  className="text-white/80 hover:text-white relative transition group"
-                >
-                  <RotateCcw className="w-12 h-12 md:w-20 md:h-20" />
-                  <span className="absolute inset-0 flex items-center justify-center text-xs md:text-sm font-bold mt-1 group-hover:scale-110 transition">10</span>
-                </button>
-
-                <button 
-                  onClick={togglePlay}
-                  className="text-white hover:scale-110 transition-transform duration-200"
-                >
-                  {isPlaying 
-                    ? <Pause className="w-20 h-20 md:w-32 md:h-32 fill-current" /> 
-                    : <Play className="w-20 h-20 md:w-32 md:h-32 fill-current ml-2" />
-                  }
-                </button>
-
-                <button 
-                  onClick={() => skip(10)}
-                  className="text-white/80 hover:text-white relative transition group"
-                >
-                  <RotateCw className="w-12 h-12 md:w-20 md:h-20" />
-                  <span className="absolute inset-0 flex items-center justify-center text-xs md:text-sm font-bold mt-1 group-hover:scale-110 transition">10</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Bottom Bar - Hardware Tool Mix (Recipe 3/8) */}
-            <div className="px-4 md:px-12 pb-12 bg-gradient-to-t from-black/95 via-black/60 to-transparent">
-              {/* Refined Progress Bar */}
-              <div className="relative flex-grow h-1 bg-white/20 rounded-full mb-8 group/seek">
-                <input 
-                  type="range"
-                  min="0"
-                  max={duration || 0}
-                  value={currentTime}
-                  onChange={handleProgressChange}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30"
-                />
-                {/* Visual Track */}
-                <div 
-                  className="absolute top-0 left-0 h-full bg-[#e50914] rounded-full pointer-events-none z-10 transition-[width] duration-100 ease-linear"
-                  style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
-                >
-                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-[#e50914] rounded-full scale-0 group-hover/seek:scale-100 transition-transform shadow-[0_0_15px_rgba(229,9,20,0.8)]" />
+              {!isLocked && (
+                <div className="flex flex-col flex-1 min-w-0">
+                  <h1 className="text-white text-2xl md:text-3xl font-bold truncate tracking-tight">{title}</h1>
+                  <p className="text-gray-300 text-xs md:text-sm font-medium uppercase tracking-[0.2em] opacity-70">{subtitle}</p>
                 </div>
-                {/* Buffer rail (visual only) */}
-                <div className="absolute top-0 left-0 h-full bg-white/10 rounded-full w-full pointer-events-none" />
-              </div>
+              )}
+            </div>
 
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-6 md:gap-10">
-                  <span className="text-white text-base md:text-lg font-mono tracking-tighter w-32">
-                    {formatTime(currentTime)} / {formatTime(duration)}
-                  </span>
-                  
-                  <div className="flex items-center gap-4">
+            {!isLocked && (
+              <>
+                {/* Center HUD - Premium Interactive Feedback */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="flex items-center justify-center gap-12 md:gap-24 pointer-events-auto">
                     <button 
-                      onClick={() => setIsMuted(!isMuted)}
-                      className="text-white transition group"
+                      onClick={() => skip(-10)}
+                      className="text-white/80 hover:text-white relative transition group"
                     >
-                      {isMuted ? <VolumeX className="w-6 h-6 md:w-8 md:h-8" /> : <Volume2 className="w-6 h-6 md:w-8 md:h-8" />}
+                      <RotateCcw className="w-10 h-10" />
+                      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold mt-1 group-hover:scale-110 transition">10</span>
+                    </button>
+
+                    <button 
+                      onClick={togglePlay}
+                      className="text-white hover:scale-110 transition-transform duration-200"
+                    >
+                      {isPlaying 
+                        ? <Pause className="w-16 h-16 fill-current" /> 
+                        : <Play className="w-16 h-16 fill-current ml-2" />
+                      }
+                    </button>
+
+                    <button 
+                      onClick={() => skip(10)}
+                      className="text-white/80 hover:text-white relative transition group"
+                    >
+                      <RotateCw className="w-10 h-10" />
+                      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold mt-1 group-hover:scale-110 transition">10</span>
                     </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-6 md:gap-10">
-                  <button 
-                    onClick={() => subtitleInputRef.current?.click()}
-                    className="text-white flex flex-col items-center gap-1.5 opacity-70 hover:opacity-100 transition group"
-                  >
-                    <MessageSquare className="w-5 h-5 md:w-7 md:h-7" />
-                    <span className="text-[9px] md:text-[10px] uppercase font-bold tracking-widest leading-none">
-                      {subtitleName ? 'Sub On' : 'Subtitles'}
-                    </span>
-                  </button>
-                  
-                  {(type === 'tv' || nextEpisodeId) && (
-                    <button 
-                      onClick={handleNextEpisode}
-                      className="flex items-center gap-3 bg-white/15 px-4 md:px-6 py-2.5 rounded text-white font-bold hover:bg-white/25 transition group"
+                {/* Bottom Bar - Hardware Tool Mix (Recipe 3/8) */}
+                <div className="px-4 md:px-12 pb-12 bg-gradient-to-t from-black/95 via-black/60 to-transparent">
+                  <div className="relative flex-grow h-1 bg-white/20 rounded-full mb-8 group/seek">
+                    <input 
+                      type="range"
+                      min="0"
+                      max={duration || 0}
+                      value={currentTime}
+                      onChange={handleProgressChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30"
+                    />
+                    <div 
+                      className="absolute top-0 left-0 h-full bg-brand-orange rounded-full pointer-events-none z-10 transition-[width] duration-100 ease-linear"
+                      style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
                     >
-                      <SkipForward className="w-5 h-5 md:w-6 md:h-6" />
-                      <span className="text-xs md:text-sm uppercase tracking-wider">Next Episode</span>
-                    </button>
-                  )}
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-brand-orange rounded-full scale-0 group-hover/seek:scale-100 transition-transform shadow-[0_0_15px_rgba(255,107,0,0.8)]" />
+                    </div>
+                    <div className="absolute top-0 left-0 h-full bg-white/10 rounded-full w-full pointer-events-none" />
+                  </div>
 
-                  <button 
-                    onClick={toggleFullscreen}
-                    className="text-white opacity-70 hover:opacity-100 transition"
-                  >
-                    {isFullscreen ? <Minimize className="w-6 h-6 md:w-8 md:h-8" /> : <Maximize className="w-6 h-6 md:w-8 md:h-8" />}
-                  </button>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-6 md:gap-10">
+                      <span className="text-white text-base md:text-lg font-mono tracking-tighter w-32">
+                        {formatTime(currentTime)} / {formatTime(duration)}
+                      </span>
+                      
+                      <div className="flex items-center gap-4">
+                        <button 
+                          onClick={() => setIsMuted(!isMuted)}
+                          className="text-white transition group"
+                        >
+                          {isMuted ? <VolumeX className="w-6 h-6 md:w-8 md:h-8" /> : <Volume2 className="w-6 h-6 md:w-8 md:h-8" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-6 md:gap-10">
+                      <button 
+                        onClick={() => subtitleInputRef.current?.click()}
+                        className="text-white flex flex-col items-center gap-1.5 opacity-70 hover:opacity-100 transition group"
+                      >
+                        <MessageSquare className="w-5 h-5 md:w-7 md:h-7" />
+                        <span className="text-[9px] md:text-[10px] uppercase font-bold tracking-widest leading-none">
+                          {subtitleName ? 'Sub On' : 'Subtitles'}
+                        </span>
+                      </button>
+                      
+                      {(type === 'tv' || nextEpisodeId) && (
+                        <button 
+                          onClick={handleNextEpisode}
+                          className="flex items-center gap-3 bg-white/15 px-4 md:px-6 py-2.5 rounded text-white font-bold hover:bg-white/25 transition group"
+                        >
+                          <SkipForward className="w-5 h-5 md:w-6 md:h-6" />
+                          <span className="text-xs md:text-sm uppercase tracking-wider">Next Episode</span>
+                        </button>
+                      )}
+
+                      <button 
+                        onClick={() => setIsCover(!isCover)}
+                        className="text-white opacity-40 hover:opacity-100 transition"
+                      >
+                        <ScanLine className="w-6 h-6 md:w-8 md:h-8" />
+                      </button>
+                      <button 
+                        onClick={() => setPlaybackRate(p => p >= 2 ? 0.5 : p + 0.5)}
+                        className="text-white opacity-40 hover:opacity-100 transition flex items-center gap-1"
+                      >
+                        <Gauge className="w-6 h-6 md:w-8 md:h-8" />
+                        <span className="text-xs font-mono">{playbackRate}x</span>
+                      </button>
+
+                      <button 
+                        onClick={toggleFullscreen}
+                        className="text-white opacity-70 hover:opacity-100 transition"
+                      >
+                        {isFullscreen ? <Minimize className="w-6 h-6 md:w-8 md:h-8" /> : <Maximize className="w-6 h-6 md:w-8 md:h-8" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

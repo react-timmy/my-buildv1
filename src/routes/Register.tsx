@@ -46,7 +46,7 @@ export default function Register() {
       <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-red-600/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none" />
       
-      <div className="absolute top-8 left-8 z-20">
+      <div className="absolute top-8 left-8 z-20 scale-[1.5] md:scale-[2.0] origin-top-left">
         <FilmSortLogo />
       </div>
 

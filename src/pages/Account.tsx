@@ -18,8 +18,9 @@ const AVATARS = [
 
 export default function Account() {
   const { user, profiles, activeProfile, setActiveProfile, logout, addProfile, deleteProfile, updateProfile } = useAuth();
-  const { clearLibrary } = useLibrary();
+  const { clearLibrary, wipeSavedLibrary } = useLibrary();
   const [isWipeConfirmOpen, setIsWipeConfirmOpen] = useState(false);
+  const [isWipeSavedLibraryConfirmOpen, setIsWipeSavedLibraryConfirmOpen] = useState(false);
   const [isDeleteAccountOpen, setIsDeleteAccountOpen] = useState(false);
   const [isDeleteProfileConfirmOpen, setIsDeleteProfileConfirmOpen] = useState(false);
   const [email, setEmail] = useState(user?.email || '');
@@ -233,6 +234,16 @@ export default function Account() {
             </div>
             <ChevronRight className="w-4 h-4 text-white/20 group-hover:translate-x-1 transition-transform" />
           </button>
+          <button 
+            onClick={() => { setIsWipeSavedLibraryConfirmOpen(true); }}
+            className="w-full p-5 bg-white/5 hover:bg-white/[0.07] border border-white/10 rounded-3xl flex items-center justify-between transition group"
+          >
+            <div className="flex items-center gap-3">
+              <Trash2 className="w-5 h-5 text-brand-orange" />
+              <span className="text-sm font-medium text-white/80">Wipe Saved Library</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-white/20 group-hover:translate-x-1 transition-transform" />
+          </button>
         </div>
       </div>
       
@@ -246,6 +257,16 @@ export default function Account() {
           confirmLabel="Wipe Data"
           onConfirm={() => { clearLibrary(); setIsWipeConfirmOpen(false); }}
           onCancel={() => setIsWipeConfirmOpen(false)}
+          danger
+        />
+
+        <ConfirmationModal
+          isOpen={isWipeSavedLibraryConfirmOpen}
+          title="Wipe Saved Library"
+          message="Are you sure you want to completely wipe your library from the cloud? This action cannot be undone."
+          confirmLabel="Wipe Cloud Data"
+          onConfirm={() => { wipeSavedLibrary(); setIsWipeSavedLibraryConfirmOpen(false); }}
+          onCancel={() => setIsWipeSavedLibraryConfirmOpen(false)}
           danger
         />
 

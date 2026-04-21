@@ -152,49 +152,55 @@ export default function LibraryModal({ item: initialItem, onClose }: LibraryModa
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-4">
+              <div className="flex flex-col gap-4 w-full md:w-auto">
+                {/* 1. Stream Now (Primary Play Button) */}
                 <button 
                   onClick={() => playItem(item.id, navigate)}
-                  className="flex items-center gap-3 bg-brand-orange text-white px-10 py-4 rounded-full font-black uppercase text-xs tracking-[0.2em] shadow-[0_0_40px_rgba(255,107,0,0.4)] hover:shadow-[0_0_60px_rgba(255,107,0,0.6)] hover:scale-105 active:scale-95 transition-all"
+                  className="flex flex-1 items-center justify-center gap-3 bg-brand-orange text-white px-10 py-4 rounded-full font-black uppercase text-xs tracking-[0.2em] shadow-[0_0_40px_rgba(255,107,0,0.4)] hover:shadow-[0_0_60px_rgba(255,107,0,0.6)] hover:scale-105 active:scale-95 transition-all w-full md:w-auto"
                 >
                   <Play className="w-5 h-5 fill-current" />
                   Stream Now
                 </button>
 
-                {extendedData?.trailerKey && (
-                  <button 
-                    onClick={() => window.open(`https://www.youtube.com/watch?v=${extendedData.trailerKey}`, '_blank')}
-                    className="flex items-center gap-3 bg-white/5 text-white px-8 py-4 rounded-full font-black uppercase text-xs tracking-[0.2em] border border-white/10 hover:bg-white/10 transition-all"
-                  >
-                    Watch Trailer
-                  </button>
-                )}
-                
-                <div className="flex items-center gap-3">
-                  <button 
-                    onClick={() => toggleInMyList(item.id)}
-                    className={`w-14 h-14 glass-card rounded-full flex items-center justify-center transition-all border-white/20 active:scale-90 group ${
-                      item.meta.inMyList ? 'bg-white/10 border-white text-brand-blue' : 'text-white hover:bg-white/5'
-                    }`}
-                  >
-                    {item.meta.inMyList ? <Check className="w-6 h-6" /> : <Plus className="w-6 h-6 group-hover:scale-110 transition-transform" />}
-                  </button>
+                {/* The "Line" for Secondary Actions */}
+                <div className="flex flex-row items-center gap-4">
+                  {/* Group: My List & Like (Circular Glass Cards) */}
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => toggleInMyList(item.id)}
+                      className={`w-14 h-14 glass-card rounded-full flex items-center justify-center transition-all border-white/20 active:scale-90 group shrink-0 ${
+                        item.meta.inMyList ? 'bg-white/10 border-white text-brand-blue' : 'text-white hover:bg-white/5'
+                      }`}
+                    >
+                      {item.meta.inMyList ? <Check className="w-6 h-6" /> : <Plus className="w-6 h-6 group-hover:scale-110 transition-transform" />}
+                    </button>
 
-                  <button 
-                    onClick={() => toggleLiked(item.id)}
-                    className={`w-14 h-14 glass-card rounded-full flex items-center justify-center transition-all border-white/20 active:scale-90 group ${
-                      item.meta.isLiked ? 'bg-brand-orange/20 border-brand-orange text-brand-orange' : 'text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <ThumbsUp className={`w-6 h-6 group-hover:scale-110 transition-transform ${item.meta.isLiked ? 'fill-current' : ''}`} />
-                  </button>
+                    <button 
+                      onClick={() => toggleLiked(item.id)}
+                      className={`w-14 h-14 glass-card rounded-full flex items-center justify-center transition-all border-white/20 active:scale-90 group shrink-0 ${
+                        item.meta.isLiked ? 'bg-brand-orange/20 border-brand-orange text-brand-orange' : 'text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <ThumbsUp className={`w-6 h-6 group-hover:scale-110 transition-transform ${item.meta.isLiked ? 'fill-current' : ''}`} />
+                    </button>
+                  </div>
+
+                  {/* 4. Watch Trailer (Conditional rendering based on TMDB API) */}
+                  {extendedData?.trailerKey && (
+                    <button 
+                      onClick={() => window.open(`https://www.youtube.com/watch?v=${extendedData.trailerKey}`, '_blank')}
+                      className="flex-1 flex items-center justify-center gap-3 bg-white/5 text-white px-8 py-4 rounded-full font-black uppercase text-[10px] tracking-[0.2em] border border-white/10 hover:bg-white/10 transition-all backdrop-blur-md"
+                    >
+                      Watch Trailer
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
           {/* Detailed Info Grid */}
-          <div className="px-8 md:px-16 pt-0 pb-20 grid lg:grid-cols-12 gap-12">
+          <div className="px-8 md:px-16 pt-0 pb-20 grid lg:grid-cols-12 gap-12 bg-[#050505] relative z-20 -mt-[2px]">
             {/* Primary content area */}
             <div className="lg:col-span-8 space-y-12">
               <div className="space-y-6">

@@ -48,11 +48,13 @@ interface LibraryContextType {
   updateProgress: (id: string, percentage: number) => void;
   toggleInMyList: (id: string) => void;
   toggleLiked: (id: string) => void;
+  relinkItem: (id: string) => Promise<boolean>;
   continueWatching: LibraryItem[];
   recentlyWatched: LibraryItem[];
   myList: LibraryItem[];
   likedList: LibraryItem[];
   clearLibrary: () => void;
+  wipeSavedLibrary: () => void;
   removeItems: (ids: string[]) => void;
   toasts: any[];
   removeToast: (id: string) => void;
@@ -73,6 +75,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const isInitialized = React.useRef(false);
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const syncTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastDebounceRef = React.useRef<{ message: string; timestamp: number } | null>(null);
 
   const groups = useMemo(() => groupLibrary(library), [library]);
 
@@ -109,12 +112,15 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         } catch (e) {}
       }
 
-      // Step 3: Validation & Healing (The Senior Engineer Part)
-      // Filter out meta entries where the physical file is missing from OPFS
-      const validLibrary = metaCache.filter(item => vaultFileNames.has(item.filename));
+      // Step 3: Validation & Branding (The Senior Engineer Part)
+      // Instead of filtering, we mark the status of items
+      const libraryWithStatus = metaCache.map(item => ({
+        ...item,
+        status: vaultFileNames.has(item.filename) ? (item.status === 'processing' ? 'processing' : 'ready') : 'missing'
+      }));
       
       // Look for Orphans (Physical files in OPFS NOT represented in metaCache)
-      const metaFileNames = new Set(validLibrary.map(i => i.filename));
+      const metaFileNames = new Set(libraryWithStatus.map(i => i.filename));
       const orphans = vaultFiles.filter(vf => !metaFileNames.has(vf.name) && vf.name !== '.metadata.json');
 
       if (orphans.length > 0) {
@@ -123,7 +129,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         recoverOrphans(orphans);
       }
 
-      setLibrary(validLibrary);
+      setLibrary(libraryWithStatus as LibraryItem[]);
       isInitialized.current = true;
     } catch (e) {
       console.error("[LibrarySync] Fatal sync error", e);
@@ -209,7 +215,14 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (syncTimer.current) clearTimeout(syncTimer.current);
         syncTimer.current = setTimeout(() => {
           axios.post(`/auth/profiles/${profileId}/sync`, { library })
-            .catch(err => console.error("[LibrarySync] Cloud sync failed", err.message));
+            .catch(err => {
+              console.error("[LibrarySync] Cloud sync failed", {
+                message: err.message,
+                status: err.response?.status,
+                data: err.response?.data,
+                config: err.config
+              });
+            });
         }, 5000);
       }
     };
@@ -300,15 +313,28 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     navigate(`/watch/local/${id}`);
   }, [library]);
 
-  const addToast = (message: string, type: any = 'info') => {
+  const addToast = useCallback((message: string, type: any = 'info') => {
+    const now = Date.now();
+    if (
+      toastDebounceRef.current && 
+      toastDebounceRef.current.message === message && 
+      now - toastDebounceRef.current.timestamp < 100
+    ) {
+      return; 
+    }
+    toastDebounceRef.current = { message, timestamp: now };
+    
     const id = Math.random().toString(36).substring(2, 9);
     setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => removeToast(id), 5000);
-  };
+    
+    setTimeout(() => {
+      setToasts(currentToasts => currentToasts.filter(t => t.id !== id));
+    }, 5000);
+  }, []);
 
-  const removeToast = (id: string) => {
+  const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
-  };
+  }, []);
 
   const processItems = async (items: Array<{filename: string, file: File, relativePath: string}>) => {
     setIsScanning(true);
@@ -361,13 +387,13 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     
     try {
       // 1. Identify with Gemini
-      if (abortControllerRef.current.signal.aborted) return;
+      if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
       setScanProgress({ phase: 'identifying', current: 0, total: items.length, label: 'Identifying movies and shows...' });
       const filenames = initialItems.map(i => i.filename);
       const aiResults = await identifyMediaBatch(filenames);
 
       // Map AI results and deduplicate
-      if (abortControllerRef.current.signal.aborted) return;
+      if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
       const generateDuplicateKey = (meta: any) => {
         const title = (meta.cleanTitle || '').toLowerCase().trim();
         if (meta.type === 'movie') {
@@ -415,12 +441,12 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setLibrary(currentLibrary);
 
       // 2. Fetch TMDB Metadata & Update incrementally
-      if (abortControllerRef.current.signal.aborted) return;
+      if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
       setScanProgress({ phase: 'metadata', current: 0, total: deduplicatedLibrary.length, label: 'Getting titles and posters...' });
       
       let processedNum = 0;
       for (const item of deduplicatedLibrary) {
-        if (abortControllerRef.current.signal.aborted) break;
+        if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) break;
         if (!initialItems.find(i => i.id === item.id)) continue;
 
         const tmdbMeta = await fetchTMDBMetadata(item.meta.cleanTitle, item.meta.type as 'movie' | 'series', item.meta.year);
@@ -440,7 +466,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       // 3. OPFS Vaulting (Native Persistence) - Transferring from UI select to Browser Private Storage
-      if (abortControllerRef.current.signal.aborted) return;
+      if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
       const itemsToVault = deduplicatedLibrary
         .filter(item => initialItems.some(init => init.id === item.id))
         .map(item => ({
@@ -450,7 +476,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       await syncToVault(itemsToVault);
 
-      if (abortControllerRef.current.signal.aborted) return;
+      if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
       setScanProgress({ phase: 'complete', current: items.length, total: items.length, label: 'Library updated' });
       addToast(`Successfully added ${items.length - duplicatesRemoved} items`, 'success');
     } catch (e) {
@@ -548,24 +574,43 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await deleteFileFromVault(file.name);
       }
       
-      // Clean up metadata
-      await saveMetadata([]);
-      const profileId = activeProfile?.id || (activeProfile as any)?._id;
-      const cacheKey = profileId ? `library_meta_cache_${profileId}` : 'library_meta_cache';
-      localStorage.removeItem(cacheKey);
+      // We DON'T wipe metadata anymore as per user request to keep library persistent
+      // Instead, we mark all items as missing since the files are gone
+      setLibrary(prev => prev.map(item => ({
+        ...item,
+        status: 'missing'
+      })));
       
+      addToast('Local video files cleared. Metadata remains synced.', 'success');
+      refreshVaultStats();
+    } catch (e) {
+      console.error("Failed to clear local vault", e);
+      addToast('Failed to clear vault', 'error');
+    }
+  };
+
+  const wipeSavedLibrary = async () => {
+    try {
+      // 1. Delete all physical files to avoid the protection block
+      const vaultFiles = await getVaultFiles();
+      for (const file of vaultFiles) {
+        await deleteFileFromVault(file.name);
+      }
+
+      // 2. Clear state
       setLibrary([]);
       
-      // Update cloud to be empty as well
+      // 3. Clear cloud
+      const profileId = activeProfile?.id || (activeProfile as any)?._id;
       if (profileId) {
         await axios.post(`/auth/profiles/${profileId}/sync`, { library: [] });
       }
 
-      addToast('Library wiped successfully', 'success');
+      addToast('Library wiped from device and cloud', 'success');
       refreshVaultStats();
     } catch (e) {
-      console.error("Failed to clear vault", e);
-      addToast('Failed to clear vault', 'error');
+      console.error("Failed to wipe saved library", e);
+      addToast('Failed to wipe saved library', 'error');
     }
   };
 
@@ -584,26 +629,6 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const toggleInMyList = useCallback((idOrItem: any) => {
-    let targetId = typeof idOrItem === 'string' ? idOrItem : null;
-    let existingItemFromPrev: LibraryItem | null = null;
-    
-    // Use the latest library state safely
-    setLibrary(prev => {
-      if (targetId) {
-        existingItemFromPrev = prev.find(i => i.id === targetId) || null;
-      } else if (idOrItem && idOrItem.id) {
-        existingItemFromPrev = prev.find(i => i.meta?.tmdbId === idOrItem.id || i.id === `tmdb_${idOrItem.id}`) || null;
-      }
-
-      if (existingItemFromPrev) {
-        const added = !existingItemFromPrev.meta.inMyList;
-        // Side effect should be here safely but better outside if possible. 
-        // Actually, let's just do it outside and find item outside.
-        return prev; 
-      }
-      return prev;
-    });
-
     // Strategy: Find item, then trigger toast and state update separately
     setLibrary(prev => {
       let targetId = typeof idOrItem === 'string' ? idOrItem : null;
@@ -617,16 +642,17 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       if (existingItem) {
         const added = !existingItem.meta.inMyList;
-        // Move side effect to separate task queue to avoid strict mode double call issue
         setTimeout(() => {
-          addToast(added ? `${existingItem?.meta.cleanTitle} added to My List` : `${existingItem?.meta.cleanTitle} removed from My List`, 'success');
+          addToast(added ? `${existingItem.meta.cleanTitle} added to My List` : `${existingItem.meta.cleanTitle} removed from My List`, 'success');
         }, 0);
+
         return prev.map(item => 
           item.id === existingItem.id ? { ...item, meta: { ...item.meta, inMyList: !item.meta.inMyList } } : item
         );
       } else if (idOrItem && idOrItem.id) {
         const title = idOrItem.title || idOrItem.name || idOrItem.original_name;
         setTimeout(() => addToast(`${title} added to My List`, 'success'), 0);
+
         const isTV = idOrItem.media_type === 'tv' || idOrItem.first_air_date;
         const newItem: LibraryItem = {
           id: `tmdb_${idOrItem.id}`,
@@ -708,6 +734,51 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return prev;
     });
   }, []);
+  
+  const relinkItem = useCallback(async (id: string) => {
+    const item = library.find(i => i.id === id);
+    if (!item) return false;
+
+    try {
+      if (!('showOpenFilePicker' in window)) {
+        addToast('File selection is not supported in this browser.', 'error');
+        return false;
+      }
+
+      const [handle] = await (window as any).showOpenFilePicker({
+        multiple: false,
+        types: [{
+          description: 'Video File',
+          accept: { 'video/*': ['.mp4', '.mkv', '.avi', '.mov', '.webm'] }
+        }]
+      });
+
+      const file = await handle.getFile();
+      
+      // Safety: check if filename matches or ask user to confirm? 
+      // User said "reupload it to their private storage then it should resynchronize".
+      // We'll trust the user picks the right file, but we should update the filename in metadata if it's different?
+      // Actually, let's keep the metadata and update the physical file.
+      
+      setIsVaulting(true);
+      await saveFileToVault(file);
+      setIsVaulting(false);
+      
+      setLibrary(prev => prev.map(p => 
+        p.id === id ? { ...p, status: 'ready', filename: file.name } : p
+      ));
+      
+      refreshVaultStats();
+      addToast(`${item.meta.cleanTitle} successfully relinked`, 'success');
+      return true;
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error(err);
+        addToast('Relink failed', 'error');
+      }
+      return false;
+    }
+  }, [library, refreshVaultStats]);
 
   const removeItems = async (ids: string[]) => {
     const itemsToRemove = library.filter(item => ids.includes(item.id));
@@ -745,7 +816,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       needsRelink: false, relinkLibrary, playItem,
       scanFiles, pickFiles, getFile, updateProgress,
       toggleInMyList, toggleLiked, cancelScan,
-      continueWatching, recentlyWatched, myList, likedList, clearLibrary, removeItems,
+      continueWatching, recentlyWatched, myList, likedList, clearLibrary, wipeSavedLibrary, removeItems,
       toasts, removeToast, addToast
     }}>
       {children}

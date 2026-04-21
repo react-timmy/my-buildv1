@@ -9,7 +9,7 @@ export interface LibraryItem {
   handle?: FileSystemFileHandle; // For directory picker
   driveFileId?: string; // Legacy: Google Drive File ID
   videoUrl?: string; // Firebase Storage URL
-  status: 'pending' | 'processing' | 'ready' | 'error';
+  status: 'pending' | 'processing' | 'ready' | 'error' | 'missing';
   meta: MediaMetadata;
   size: number;
   addedAt: number;

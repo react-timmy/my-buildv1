@@ -95,7 +95,7 @@ export default function Navbar() {
       <div className="px-4 md:px-12 flex items-center justify-between">
         {/* Left: logo + nav links */}
         <div className="flex items-center gap-10">
-          <FilmSortLogo onClick={() => navigate('/browse')} className="scale-110" />
+          <FilmSortLogo onClick={() => navigate('/browse')} className="scale-[1.5] md:scale-[2.0]" />
           <ul className="hidden lg:flex gap-8 text-[11px] uppercase tracking-[0.2em] font-black text-white/40">
             <li className={`cursor-pointer transition-colors hover:text-white ${location.pathname === '/browse' ? 'text-white' : ''}`} onClick={() => navigate('/browse')}>Home</li>
             <li className={`cursor-pointer transition-colors hover:text-white ${location.pathname === '/tv-shows' ? 'text-white' : ''}`} onClick={() => navigate('/tv-shows')}>Shows</li>

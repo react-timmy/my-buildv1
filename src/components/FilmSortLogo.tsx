@@ -1,18 +1,26 @@
 import React from 'react';
 
-export default function FilmSortLogo({ className = "text-2xl md:text-3xl", onClick }: { className?: string, onClick?: () => void }) {
+export default function FilmSortLogo({ className = "", onClick }: { className?: string, onClick?: () => void }) {
   return (
-    <div 
-      className={`flex items-baseline cursor-pointer group selection:bg-none ${className}`}
-      onClick={onClick}
-    >
-      <div className="relative flex items-baseline">
+      <div 
+        className={`flex items-center group selection:bg-none ${onClick ? 'cursor-pointer' : ''} ${className}`}
+        onClick={onClick}
+        onKeyDown={(e) => {
+          if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onClick();
+          }
+        }}
+        role={onClick ? 'button' : undefined}
+        tabIndex={onClick ? 0 : undefined}
+      >
+      <div className="relative flex items-center">
         {/* Arched Text Effect using a subtle skew and perspective */}
-        <div className="flex items-baseline group-hover:scale-[1.02] transition-transform duration-500 will-change-transform">
-          <span className="font-display font-black text-brand-orange tracking-[-0.08em] text-4xl md:text-5xl uppercase drop-shadow-[0_0_25px_rgba(255,107,0,0.4)] [text-shadow:2px_2px_0px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center group-hover:scale-[1.02] transition-transform duration-500 will-change-transform">
+          <span className="font-display font-black text-brand-orange tracking-[-0.08em] text-2xl uppercase drop-shadow-[0_0_25px_rgba(255,107,0,0.4)] [text-shadow:1px_1px_0px_rgba(0,0,0,0.5)]">
             FILM
           </span>
-          <span className="font-display font-black text-brand-orange tracking-[-0.08em] text-4xl md:text-5xl uppercase ml-[-2px] drop-shadow-[0_0_25px_rgba(255,107,0,0.4)] [text-shadow:2px_2px_0px_rgba(0,0,0,0.5)]">
+          <span className="font-display font-black text-brand-orange tracking-[-0.08em] text-2xl uppercase ml-[-1px] drop-shadow-[0_0_25px_rgba(255,107,0,0.4)] [text-shadow:1px_1px_0px_rgba(0,0,0,0.5)]">
             SORT
           </span>
         </div>
@@ -23,10 +31,10 @@ export default function FilmSortLogo({ className = "text-2xl md:text-3xl", onCli
       </div>
 
       {/* Modern Subtitle Mark */}
-      <div className="ml-3 hidden md:flex flex-col">
-        <div className="h-4 w-[1px] bg-white/20 mb-1" />
-        <span className="text-[8px] font-black uppercase tracking-[0.4em] text-white/40 group-hover:text-brand-blue transition-colors">
-          Digital Vault
+      <div className="ml-2 hidden md:flex flex-col justify-center">
+        <div className="h-4 w-[1px] bg-white/20 mb-0.5" />
+        <span className="text-[6px] font-black uppercase tracking-[0.2em] text-white/40 group-hover:text-brand-blue transition-colors">
+          Vault
         </span>
       </div>
     </div>

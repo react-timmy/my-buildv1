@@ -48,7 +48,9 @@ export default function App() {
             
             <Route element={<ProfileRoute />}>
               <Route element={<MobileLayout />}>
-                <Route path="/browse" element={<Browse />} />
+                <Route path="/browse" element={<Browse type="all" />} />
+                <Route path="/movies" element={<Browse type="movie" />} />
+                <Route path="/tv-shows" element={<Browse type="tv" />} />
                 <Route path="/search" element={<Search />} />
                 <Route path="/my-list" element={<MyList />} />
                 <Route path="/library" element={<Library />} />

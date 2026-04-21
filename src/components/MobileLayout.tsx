@@ -3,6 +3,7 @@ import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { Home, Search, Library, User, Bookmark, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
+import Navbar from './Navbar';
 
 const MobileLayout: React.FC = () => {
   const location = useLocation();
@@ -25,6 +26,10 @@ const MobileLayout: React.FC = () => {
 
       {/* Content Area */}
       <main className="flex-1 overflow-y-auto overflow-x-hidden relative z-10 scroll-smooth scrollbar-hide pb-20">
+        {/* Desktop Nav */}
+        <div className="hidden md:block">
+          <Navbar />
+        </div>
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
