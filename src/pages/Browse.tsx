@@ -263,7 +263,7 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
       )}
 
       {/* Cinematic Hero Stage */}
-      <section className="sticky top-0 w-full min-h-[90vh] flex flex-col items-center justify-start z-0 pt-24 px-5">
+      <section className="sticky top-0 w-full flex flex-col items-center justify-start z-0 pt-20 px-5 transition-all">
         {/* Top Header Spot */}
         <div className="absolute top-8 left-5 md:left-7 z-50 scale-[1.5] md:scale-[2.0] origin-top-left pointer-events-auto hidden md:block">
             <FilmSortLogo onClick={() => navigate('/browse')} />
