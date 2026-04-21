@@ -14,6 +14,14 @@ import {
   loadMetadata 
 } from '../lib/opfs';
 
+import { 
+  saveHandle, 
+  getHandle, 
+  verifyPermission, 
+  deleteHandle,
+  clearHandles
+} from '../lib/idb';
+
 interface ScanProgress {
   phase: 'idle' | 'scanning' | 'identifying' | 'metadata' | 'vaulting' | 'complete';
   current: number;
@@ -114,9 +122,22 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       // Step 3: Validation & Branding (The Senior Engineer Part)
       // Instead of filtering, we mark the status of items
-      const libraryWithStatus = metaCache.map(item => ({
-        ...item,
-        status: vaultFileNames.has(item.filename) ? (item.status === 'processing' ? 'processing' : 'ready') : 'missing'
+      const libraryWithStatus = await Promise.all(metaCache.map(async item => {
+        // Reality Check 1: Is it in OPFS?
+        if (vaultFileNames.has(item.filename)) {
+          return { ...item, status: item.status === 'processing' ? 'processing' : 'ready' };
+        }
+        
+        // Reality Check 2: Do we have a Phantom Pointer (Handle) in local IDB?
+        const handle = await getHandle(item.id);
+        if (handle) {
+          // Even if permission is currently revoked by the browser (on reload), 
+          // we have the handle, so we mark it as 'ready' to keep the grid UI clean.
+          // The Watch page will handle the permission challenge.
+          return { ...item, status: 'ready' };
+        }
+
+        return { ...item, status: 'missing' };
       }));
       
       // Look for Orphans (Physical files in OPFS NOT represented in metaCache)
@@ -266,13 +287,22 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!item) return null;
 
     try {
+      // Priority 1: Phantom Handle (Local SSD Access - Zero latency)
+      const handle = await getHandle(id);
+      if (handle) {
+        if (await verifyPermission(handle)) {
+          return await handle.getFile();
+        }
+      }
+
+      // Priority 2: Vault (OPFS - Browser Sandbox)
       const vaultFiles = await getVaultFiles();
       const vaultEntry = vaultFiles.find(f => f.name === item.filename);
       if (vaultEntry) {
         return await getFileBlob(vaultEntry.handle);
       }
     } catch (e) {
-        console.error("Vault access error", e);
+        console.error("Media access error", e);
     }
     return null;
   }, [library]);
@@ -336,7 +366,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const processItems = async (items: Array<{filename: string, file: File, relativePath: string}>) => {
+  const processItems = async (items: Array<{filename: string, file: File, relativePath: string, handle?: FileSystemFileHandle}>) => {
     setIsScanning(true);
     abortControllerRef.current = new AbortController();
     setScanProgress({ phase: 'scanning', current: 0, total: items.length, label: 'Adding files...' });
@@ -345,7 +375,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const filteredItems = items.filter(item => {
       const name = item.filename.toLowerCase();
       // Block UUIDs
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const baseName = item.filename.split('.')[0];
       if (uuidRegex.test(baseName)) return false;
       
@@ -366,9 +396,14 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const initialItems: LibraryItem[] = [];
 
-    filteredItems.forEach((item) => {
+    for (const item of filteredItems) {
       const id = "local_" + Math.random().toString(36).substring(2, 11);
       
+      // If we have a handle (Phantom Upload), save it to IDB immediately
+      if (item.handle) {
+        await saveHandle(id, item.handle);
+      }
+
       initialItems.push({
         id,
         filename: item.filename,
@@ -380,7 +415,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         watched: false,
         progressPercentage: 0
       });
-    });
+    }
 
     let currentLibrary = [...library, ...initialItems];
     setLibrary(currentLibrary);
@@ -465,16 +500,24 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }));
       }
 
-      // 3. OPFS Vaulting (Native Persistence) - Transferring from UI select to Browser Private Storage
+      // 3. Vaulting (Phantom vs OPFS)
       if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
-      const itemsToVault = deduplicatedLibrary
-        .filter(item => initialItems.some(init => init.id === item.id))
+      
+      // Filter items that NEED OPFS vaulting (those without handles)
+      const itemsToVaultToOPFS = deduplicatedLibrary
+        .filter(item => {
+          const isNew = initialItems.some(init => init.id === item.id);
+          const hasHandle = filteredItems.find(src => src.filename === item.filename)?.handle;
+          return isNew && !hasHandle;
+        })
         .map(item => ({
           item,
           sourceFile: filteredItems.find(src => src.filename === item.filename)!.file
         }));
 
-      await syncToVault(itemsToVault);
+      if (itemsToVaultToOPFS.length > 0) {
+        await syncToVault(itemsToVaultToOPFS);
+      }
 
       if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
       setScanProgress({ phase: 'complete', current: items.length, total: items.length, label: 'Library updated' });
@@ -513,7 +556,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const pickFiles = async () => {
     try {
       if (!('showOpenFilePicker' in window)) {
-        addToast('File selection is not supported in this browser. Please drag and drop files if available.', 'error');
+        addToast('The Instant Phantom Upload depends on the File System Access API which is not supported in this browser. Falling back to OPFS Copying.', 'info');
         return;
       }
       
@@ -525,16 +568,17 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }]
       });
 
-      const items: Array<{filename: string, file: File, relativePath: string}> = [];
+      const items: Array<{filename: string, file: File, relativePath: string, handle: FileSystemFileHandle}> = [];
       
-      setScanProgress({ phase: 'scanning', current: 0, total: handles.length, label: 'Reading your files...' });
+      setScanProgress({ phase: 'scanning', current: 0, total: handles.length, label: 'Linking your collection...' });
       setIsScanning(true);
       
       for (let i = 0; i < handles.length; i++) {
         try {
-          const file = await handles[i].getFile();
-          items.push({ filename: file.name, file, relativePath: file.name });
-          setScanProgress(p => ({ ...p, current: i + 1, label: `Opening: ${file.name}` }));
+          const handle = handles[i];
+          const file = await handle.getFile();
+          items.push({ filename: file.name, file, relativePath: file.name, handle });
+          setScanProgress(p => ({ ...p, current: i + 1, label: `Linking: ${file.name}` }));
         } catch (e) {
           console.error("Failed to get file from handle", e);
         }
@@ -574,6 +618,8 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await deleteFileFromVault(file.name);
       }
       
+      await clearHandles();
+      
       // We DON'T wipe metadata anymore as per user request to keep library persistent
       // Instead, we mark all items as missing since the files are gone
       setLibrary(prev => prev.map(item => ({
@@ -581,7 +627,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         status: 'missing'
       })));
       
-      addToast('Local video files cleared. Metadata remains synced.', 'success');
+      addToast('Local video storage cleared. Phantom links and Metadata remain.', 'success');
       refreshVaultStats();
     } catch (e) {
       console.error("Failed to clear local vault", e);
@@ -786,8 +832,9 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     for (const item of itemsToRemove) {
       try {
         await deleteFileFromVault(item.filename);
+        await deleteHandle(item.id);
       } catch (e) {
-        console.error(`Failed to delete ${item.filename} from vault`, e);
+        console.error(`Failed to delete ${item.filename} from storage`, e);
       }
     }
 

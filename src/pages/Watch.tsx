@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import axios from '../lib/axios';
 import { useLibrary } from '../context/LibraryContext';
 import { useAuth } from '../context/AuthContext';
+import { getHandle, verifyPermission } from '../lib/idb';
 
 export default function Watch() {
   const { type, movieId } = useParams<{ type: string; movieId: string }>();
@@ -27,6 +28,7 @@ export default function Watch() {
   const [subtitleName, setSubtitleName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isLockedBySystem, setIsLockedBySystem] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [showControls, setShowControls] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -138,6 +140,14 @@ export default function Watch() {
           const file = await getFile(activeMovieId!);
           if (file) {
             setVideoSrc(URL.createObjectURL(file));
+            setLoading(false);
+            return;
+          }
+
+          // Check if it's a Phantom link that needs permission
+          const handle = await getHandle(activeMovieId!);
+          if (handle) {
+            setIsLockedBySystem(true);
             setLoading(false);
             return;
           }
@@ -458,6 +468,24 @@ export default function Watch() {
     };
   }, []);
 
+  const handleUnlock = async () => {
+    try {
+      const handle = await getHandle(movieId!);
+      if (handle) {
+        const granted = await verifyPermission(handle, true);
+        if (granted) {
+          const file = await handle.getFile();
+          setVideoSrc(URL.createObjectURL(file));
+          setIsLockedBySystem(false);
+          addToast("Phantom link successfully re-established", "success");
+        }
+      }
+    } catch (err: any) {
+      console.error("Unlock failed", err);
+      addToast("Failed to unlock file access", "error");
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-screen w-screen bg-black flex items-center justify-center">
@@ -466,25 +494,47 @@ export default function Watch() {
     );
   }
 
-  if (error) {
+  if (isLockedBySystem || error) {
     const item = library.find(li => li.id === movieId);
     const isMissing = item?.status === 'missing';
 
     return (
       <div className="h-screen w-screen bg-black flex flex-col items-center justify-center p-8 text-center text-white">
-        <AlertCircle className="w-16 h-16 text-[#e50914] mb-4" />
-        <h2 className="text-2xl font-bold mb-2">Something went wrong.</h2>
-        <p className="text-gray-400 mb-8 max-w-md">{error}</p>
+        <div className="w-24 h-24 bg-brand-orange/10 rounded-full flex items-center justify-center mb-8 shadow-[0_0_80px_rgba(255,107,0,0.2)]">
+          {isLockedBySystem ? (
+            <Lock className="w-12 h-12 text-brand-orange" />
+          ) : (
+            <AlertCircle className="w-12 h-12 text-red-500" />
+          )}
+        </div>
+        
+        <h2 className="text-3xl font-black mb-4 tracking-tighter">
+          {isLockedBySystem ? "Permission Required" : "Something went wrong"}
+        </h2>
+        
+        <p className="text-white/40 mb-10 max-w-md text-sm leading-relaxed uppercase tracking-widest font-bold">
+          {isLockedBySystem 
+            ? "Your browser session has expired the file access link. To ensure zero-bandwidth playback from your local drive, the browser requires a one-time permission grant." 
+            : (error || "Failed to load video.")}
+        </p>
         
         <div className="flex flex-col sm:flex-row gap-4">
           <button 
             onClick={handleBack}
-            className="bg-white/10 text-white px-8 py-3 rounded-2xl font-bold hover:bg-white/20 transition"
+            className="px-10 py-4 bg-white/5 text-white/60 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:text-white hover:bg-white/10 transition-all"
           >
             Go Back
           </button>
           
-          {isMissing && (
+          {isLockedBySystem ? (
+             <button 
+                onClick={handleUnlock}
+                className="px-10 py-4 bg-brand-orange text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[0_0_30px_rgba(255,107,0,0.3)] hover:shadow-[0_0_50px_rgba(255,107,0,0.5)] active:scale-95 transition-all flex items-center gap-3"
+             >
+                <Unlock className="w-4 h-4" />
+                Unlock Access
+             </button>
+          ) : isMissing && (
             <button 
               onClick={async () => {
                 const success = await relinkItem(movieId!);
@@ -492,9 +542,9 @@ export default function Watch() {
                   window.location.reload(); // Hard reload to restart the player state
                 }
               }}
-              className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-indigo-500 transition shadow-[0_0_20px_rgba(79,70,229,0.3)] flex items-center gap-2"
+              className="px-10 py-4 bg-brand-blue text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[0_0_30px_rgba(0,186,255,0.3)] hover:shadow-[0_0_50px_rgba(0,186,255,0.5)] active:scale-95 transition-all flex items-center gap-3"
             >
-              <HardDrive className="w-5 h-5" />
+              <HardDrive className="w-4 h-4" />
               Re-upload & Play
             </button>
           )}
