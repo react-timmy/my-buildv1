@@ -92,7 +92,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [vaultStats, setVaultStats] = useState<VaultStats | null>({ used: 0, quota: 100 * 1024 * 1024 * 1024, count: 0 }); // 100GB dummy quota for Phantom UI
   const [scanProgress, setScanProgress] = useState<ScanProgress>({ phase: 'idle', current: 0, total: 0 });
   const [toasts, setToasts] = useState<any[]>([]);
-  const isInitialized = React.useRef(false);
+  const initializedProfileId = React.useRef<string | null | undefined>(undefined);
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const syncTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastDebounceRef = React.useRef<{ message: string; timestamp: number } | null>(null);
@@ -126,14 +126,19 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  const { loading: authLoading } = useAuth();
+
   // Synchronize Library with OPFS and Cloud Sync on mount
   const syncWithVaultContents = useCallback(async () => {
-    if (isInitialized.current) return;
+    if (authLoading) return;
+    
+    const profileId = activeProfile?.id || (activeProfile as any)?._id || 'guest';
+    if (initializedProfileId.current === profileId) return;
+    
     setIsInitialSyncing(true);
     
     try {
-      const profileId = activeProfile?.id || (activeProfile as any)?._id;
-      console.log(`[LibrarySync] Initializing for profile: ${profileId || 'Guest'}`);
+      console.log(`[LibrarySync] Initializing for profile: ${profileId}`);
       
       // Step 1: Physical Check (Reality Check)
       const vaultFiles = await getVaultFiles();
@@ -188,13 +193,13 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       setLibrary(libraryWithStatus as LibraryItem[]);
-      isInitialized.current = true;
+      initializedProfileId.current = profileId;
     } catch (e) {
       console.error("[LibrarySync] Fatal sync error", e);
     } finally {
       setIsInitialSyncing(false);
     }
-  }, [activeProfile?.id]);
+  }, [activeProfile?.id, authLoading]);
 
   const recoverOrphans = async (orphans: any[]) => {
     // This runs in background to heal the library
@@ -248,7 +253,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Persistent Save Effect - ATOMIC & PROTECTED
   useEffect(() => {
     // CRITICAL: Do NOT save during sync or before initialization
-    if (!isInitialized.current || isInitialSyncing) return;
+    if (!initializedProfileId.current || isInitialSyncing) return;
     
     const profileId = activeProfile?.id || (activeProfile as any)?._id;
 
@@ -747,13 +752,18 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await deleteFileFromVault(file.name);
       }
 
+      await clearHandles();
+
       // 2. Clear state
       setLibrary([]);
       
-      // 3. Clear cloud
+      // 3. Clear cloud & local storage
       const profileId = activeProfile?.id || (activeProfile as any)?._id;
       if (profileId) {
+        localStorage.removeItem(`library_meta_cache_${profileId}`);
         await axios.post(`/auth/profiles/${profileId}/sync`, { library: [] });
+      } else {
+        localStorage.removeItem('library_meta_cache');
       }
 
       addToast('Library wiped from device and cloud', 'success');

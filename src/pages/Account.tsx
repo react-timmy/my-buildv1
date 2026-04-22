@@ -86,9 +86,7 @@ export default function Account() {
     }
   };
 
-  const handleDeleteAccount = async () => {
-    if (!window.confirm("Are you sure you want to delete your account? This action is permanent and cannot be undone.")) return;
-    
+  const handleDeleteAccount = async () => {    
     setLoading(true);
     try {
       await axios.delete('/auth/account');
