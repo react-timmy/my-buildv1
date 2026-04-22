@@ -77,7 +77,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isScanning, setIsScanning] = useState(false);
   const [isVaulting, setIsVaulting] = useState(false);
   const [isInitialSyncing, setIsInitialSyncing] = useState(true);
-  const [vaultStats, setVaultStats] = useState<VaultStats | null>(null);
+  const [vaultStats, setVaultStats] = useState<VaultStats | null>({ used: 0, quota: 100 * 1024 * 1024 * 1024, count: 0 }); // 100GB dummy quota for Phantom UI
   const [scanProgress, setScanProgress] = useState<ScanProgress>({ phase: 'idle', current: 0, total: 0 });
   const [toasts, setToasts] = useState<any[]>([]);
   const isInitialized = React.useRef(false);
@@ -123,21 +123,21 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Step 3: Validation & Branding (The Senior Engineer Part)
       // Instead of filtering, we mark the status of items
       const libraryWithStatus = await Promise.all(metaCache.map(async item => {
-        // Reality Check 1: Is it in OPFS?
-        if (vaultFileNames.has(item.filename)) {
-          return { ...item, status: item.status === 'processing' ? 'processing' : 'ready' };
-        }
-        
-        // Reality Check 2: Do we have a Phantom Pointer (Handle) in local IDB?
+        // Reality Check 1: Do we have a Phantom Pointer (Handle) in local IDB?
         const handle = await getHandle(item.id);
         if (handle) {
           // Even if permission is currently revoked by the browser (on reload), 
           // we have the handle, so we mark it as 'ready' to keep the grid UI clean.
           // The Watch page will handle the permission challenge.
-          return { ...item, status: 'ready' };
+          return { ...item, status: 'ready' as const };
         }
 
-        return { ...item, status: 'missing' };
+        // Reality Check 2: Is it in OPFS? (Legacy/Mobile Fallback)
+        if (vaultFileNames.has(item.filename)) {
+          return { ...item, status: item.status === 'processing' ? 'processing' : 'ready' };
+        }
+        
+        return { ...item, status: 'missing' as const };
       }));
       
       // Look for Orphans (Physical files in OPFS NOT represented in metaCache)
@@ -264,11 +264,16 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const refreshVaultStats = useCallback(async () => {
     try {
       const stats = await getVaultStats();
-      setVaultStats(stats);
+      // For Phantom Upload, "Used" is just the metadata count or tiny OPFS cache
+      setVaultStats({
+        used: stats.used,
+        quota: 100 * 1024 * 1024 * 1024, // 100GB Virtual limit for better UX
+        count: library.length
+      });
     } catch (e) {
       console.error("Failed to fetch vault stats", e);
     }
-  }, []);
+  }, [library.length]);
 
   useEffect(() => {
     refreshVaultStats();
@@ -369,27 +374,23 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const processItems = async (items: Array<{filename: string, file: File, relativePath: string, handle?: FileSystemFileHandle}>) => {
     setIsScanning(true);
     abortControllerRef.current = new AbortController();
-    setScanProgress({ phase: 'scanning', current: 0, total: items.length, label: 'Adding files...' });
+    setScanProgress({ phase: 'scanning', current: 0, total: items.length, label: 'Adding Phantom Pointers...' });
     
     // Filtering logic to block non-media filenames (UUIDs, Screen Recordings, etc.)
     const filteredItems = items.filter(item => {
       const name = item.filename.toLowerCase();
-      // Block UUIDs
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const baseName = item.filename.split('.')[0];
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      
       if (uuidRegex.test(baseName)) return false;
-      
-      // Block Screen Recordings
       if (name.includes('screen recording') || name.includes('screenshot') || name.includes('capture')) return false;
-      
-      // Block common generic garbage patterns
-      if (name.match(/^[0-9]{10,}$/)) return false; // Long numeric strings
+      if (name.match(/^[0-9]{10,}$/)) return false; 
       
       return true;
     });
 
     if (filteredItems.length === 0 && items.length > 0) {
-      addToast('No valid movies or TV shows identified in the selection', 'error');
+      addToast('No valid movies or TV shows identified', 'error');
       setIsScanning(false);
       return;
     }
@@ -397,7 +398,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const initialItems: LibraryItem[] = [];
 
     for (const item of filteredItems) {
-      const id = "local_" + Math.random().toString(36).substring(2, 11);
+      const id = "phantom_" + Math.random().toString(36).substring(2, 11);
       
       // If we have a handle (Phantom Upload), save it to IDB immediately
       if (item.handle) {
@@ -417,114 +418,88 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
     }
 
-    let currentLibrary = [...library, ...initialItems];
-    setLibrary(currentLibrary);
+    setLibrary(prev => [...prev, ...initialItems]);
     
     try {
       // 1. Identify with Gemini
       if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
-      setScanProgress({ phase: 'identifying', current: 0, total: items.length, label: 'Identifying movies and shows...' });
+      setScanProgress({ phase: 'identifying', current: 0, total: initialItems.length, label: 'Identifying titles...' });
       const filenames = initialItems.map(i => i.filename);
       const aiResults = await identifyMediaBatch(filenames);
 
-      // Map AI results and deduplicate
-      if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
-      const generateDuplicateKey = (meta: any) => {
-        const title = (meta.cleanTitle || '').toLowerCase().trim();
-        if (meta.type === 'movie') {
-          return `movie:${title}:${meta.year || ''}`;
-        } else if (meta.type === 'series') {
-          return `series:${title}:s${meta.season || 0}e${meta.episode || 0}`;
-        }
-        return `unknown:${title}`;
+      // Deduplication Logic
+      const generateKey = (item: any) => {
+        const title = (item.meta.cleanTitle || '').toLowerCase().trim();
+        if (item.meta.type === 'movie') return `movie:${title}:${item.meta.year || ''}`;
+        if (item.meta.type === 'series') return `series:${title}:s${item.meta.season || 0}e${item.meta.episode || 0}`;
+        return `unknown:${item.filename}`;
       };
-
-      const uniqueKeys = new Set<string>();
-      const deduplicatedLibrary: LibraryItem[] = [];
-      let duplicatesRemoved = 0;
-
-      for (const item of currentLibrary) {
-        let finalItem = { ...item };
-        
-        // Only map AI results for newly added items
-        if (initialItems.find(i => i.id === item.id)) {
-          const aiRes = aiResults.find(r => r.original_name === item.filename);
-          if (aiRes) {
-            finalItem.meta = {
-              ...item.meta,
-              type: (aiRes.type as 'movie' | 'series') || 'unknown',
-              cleanTitle: aiRes.clean_title || item.meta.cleanTitle,
-              year: aiRes.year,
-              season: aiRes.season,
-              episode: aiRes.episode,
-              folderName: aiRes.folderName || aiRes.clean_title || item.meta.cleanTitle
-            };
-          }
-        }
-
-        // Check for duplicates
-        const key = generateDuplicateKey(finalItem.meta);
-        if (uniqueKeys.has(key)) {
-          duplicatesRemoved++;
-        } else {
-          uniqueKeys.add(key);
-          deduplicatedLibrary.push(finalItem);
-        }
-      }
-
-      currentLibrary = deduplicatedLibrary;
-      setLibrary(currentLibrary);
 
       // 2. Fetch TMDB Metadata & Update incrementally
       if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
-      setScanProgress({ phase: 'metadata', current: 0, total: deduplicatedLibrary.length, label: 'Getting titles and posters...' });
+      setScanProgress({ phase: 'metadata', current: 0, total: initialItems.length, label: 'Syncing cloud metadata...' });
       
       let processedNum = 0;
-      for (const item of deduplicatedLibrary) {
+      for (const item of initialItems) {
         if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) break;
-        if (!initialItems.find(i => i.id === item.id)) continue;
 
-        const tmdbMeta = await fetchTMDBMetadata(item.meta.cleanTitle, item.meta.type as 'movie' | 'series', item.meta.year);
+        const aiRes = aiResults.find(r => r.original_name === item.filename);
+        const meta = {
+            ...item.meta,
+            type: (aiRes?.type as any) || 'movie',
+            cleanTitle: aiRes?.clean_title || item.meta.cleanTitle,
+            year: aiRes?.year || item.meta.year,
+            season: aiRes?.season,
+            episode: aiRes?.episode,
+            folderName: aiRes?.folderName || aiRes?.clean_title || item.meta.cleanTitle
+        };
+
+        // Check if we already have this in library
+        const key = generateKey({ meta, filename: item.filename });
+        const existingItem = library.find(i => generateKey(i) === key);
+
+        if (existingItem) {
+          // Merge: Connect the handle to the existing ID
+          const handle = await getHandle(item.id);
+          if (handle) {
+            await saveHandle(existingItem.id, handle);
+            await deleteHandle(item.id); // Clean up the temporary one
+          }
+          
+          setLibrary(prev => prev.filter(p => p.id !== item.id).map(p => {
+             if (p.id === existingItem.id) {
+               return { ...p, status: 'ready' as const, filename: item.filename, size: item.size };
+             }
+             return p;
+          }));
+          processedNum++;
+          continue;
+        }
+
+        const tmdbMeta = await fetchTMDBMetadata(meta.cleanTitle, meta.type, meta.year);
+
         processedNum++;
-        setScanProgress(p => ({ ...p, current: processedNum, label: `Getting details for: ${item.meta.cleanTitle}` }));
+        setScanProgress(p => ({ ...p, current: processedNum, label: `Linked: ${meta.cleanTitle}` }));
 
         setLibrary(prev => prev.map(p => {
           if (p.id === item.id) {
             return {
               ...p,
               status: 'ready' as const,
-              meta: { ...p.meta, ...(tmdbMeta || {}) }
+              meta: { 
+                ...meta, 
+                ...(tmdbMeta || {}),
+              }
             };
           }
           return p;
         }));
       }
 
-      // 3. Vaulting (Phantom vs OPFS)
-      if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
-      
-      // Filter items that NEED OPFS vaulting (those without handles)
-      const itemsToVaultToOPFS = deduplicatedLibrary
-        .filter(item => {
-          const isNew = initialItems.some(init => init.id === item.id);
-          const hasHandle = filteredItems.find(src => src.filename === item.filename)?.handle;
-          return isNew && !hasHandle;
-        })
-        .map(item => ({
-          item,
-          sourceFile: filteredItems.find(src => src.filename === item.filename)!.file
-        }));
-
-      if (itemsToVaultToOPFS.length > 0) {
-        await syncToVault(itemsToVaultToOPFS);
-      }
-
-      if (!abortControllerRef.current || abortControllerRef.current.signal.aborted) return;
-      setScanProgress({ phase: 'complete', current: items.length, total: items.length, label: 'Library updated' });
-      addToast(`Successfully added ${items.length - duplicatesRemoved} items`, 'success');
+      setScanProgress({ phase: 'complete', current: items.length, total: items.length, label: 'Phantom Linkage Successful' });
     } catch (e) {
       console.error("Error during processing", e);
-      addToast('Error adding files', 'error');
+      addToast('Error during Phantom linkage', 'error');
     } finally {
       setTimeout(() => {
         setIsScanning(false);
@@ -553,24 +528,53 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     await processItems(normalized);
   };
 
+  const triggerStandardPicker = (multiple: boolean = true) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = multiple;
+    input.accept = 'video/mp4,video/x-matroska,video/x-msvideo,video/quicktime,video/webm,.mp4,.mkv,.avi,.mov,.webm';
+    input.onchange = async (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (files) {
+        await scanFiles(files);
+      }
+    };
+    input.click();
+  };
+
   const pickFiles = async () => {
     try {
+      // If we're in an iframe, showOpenFilePicker might be restricted by browser policy
+      // regardless of whether it "exists" in window.
       if (!('showOpenFilePicker' in window)) {
-        addToast('The Instant Phantom Upload depends on the File System Access API which is not supported in this browser. Falling back to OPFS Copying.', 'info');
+        addToast('Persistent Phantom Links require a desktop browser. On mobile, files must be re-selected each time.', 'info');
+        triggerStandardPicker(true);
         return;
       }
       
-      const handles = await (window as any).showOpenFilePicker({
-        multiple: true,
-        types: [{
-          description: 'Video Files',
-          accept: { 'video/*': ['.mp4', '.mkv', '.avi', '.mov', '.webm'] }
-        }]
-      });
+      let handles;
+      try {
+        handles = await (window as any).showOpenFilePicker({
+          multiple: true,
+          types: [{
+            description: 'Video Files',
+            accept: { 'video/*': ['.mp4', '.mkv', '.avi', '.mov', '.webm'] }
+          }]
+        });
+      } catch (pickerErr: any) {
+        // Specifically catch SecurityError (iframe restriction) or AbortError
+        if (pickerErr.name === 'SecurityError' || pickerErr.message.includes('cross origin')) {
+          console.warn("showOpenFilePicker blocked in iframe, falling back to standard picker.");
+          addToast('Browser security restricts direct file access in this view. Falling back to manual selection.', 'info');
+          triggerStandardPicker(true);
+          return;
+        }
+        throw pickerErr; // Re-throw if it's something else (like AbortError)
+      }
 
       const items: Array<{filename: string, file: File, relativePath: string, handle: FileSystemFileHandle}> = [];
       
-      setScanProgress({ phase: 'scanning', current: 0, total: handles.length, label: 'Linking your collection...' });
+      setScanProgress({ phase: 'scanning', current: 0, total: handles.length, label: 'Establishing Phantom Pointers...' });
       setIsScanning(true);
       
       for (let i = 0; i < handles.length; i++) {
@@ -592,9 +596,9 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         console.error(err);
+        addToast('File picker failed', 'error');
       }
       setIsScanning(false);
-      throw err;
     }
   };
 
@@ -787,17 +791,30 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     try {
       if (!('showOpenFilePicker' in window)) {
-        addToast('File selection is not supported in this browser.', 'error');
-        return false;
+        addToast('Persistent links not supported in this browser. Selecting file for this session.', 'info');
+        triggerStandardPicker(false);
+        return true; 
       }
 
-      const [handle] = await (window as any).showOpenFilePicker({
-        multiple: false,
-        types: [{
-          description: 'Video File',
-          accept: { 'video/*': ['.mp4', '.mkv', '.avi', '.mov', '.webm'] }
-        }]
-      });
+      let handles;
+      try {
+        handles = await (window as any).showOpenFilePicker({
+          multiple: false,
+          types: [{
+            description: 'Video File',
+            accept: { 'video/*': ['.mp4', '.mkv', '.avi', '.mov', '.webm'] }
+          }]
+        });
+      } catch (pickerErr: any) {
+        if (pickerErr.name === 'SecurityError' || pickerErr.message.includes('cross origin')) {
+          addToast('Restricted environment. Selecting file for this session.', 'info');
+          triggerStandardPicker(false);
+          return true;
+        }
+        throw pickerErr;
+      }
+
+      const [handle] = handles;
 
       const file = await handle.getFile();
       
@@ -855,7 +872,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       library, groups, isScanning, setIsScanning, isVaulting, isInitialSyncing, vaultStats, scanProgress, processingCount: 0, error: null, hasLibrary: library.length > 0,
       needsRelink: false, relinkLibrary, playItem,
       scanFiles, pickFiles, getFile, updateProgress,
-      toggleInMyList, toggleLiked, cancelScan,
+      toggleInMyList, toggleLiked, cancelScan, relinkItem,
       continueWatching, recentlyWatched, myList, likedList, clearLibrary, wipeSavedLibrary, removeItems,
       toasts, removeToast, addToast
     }}>

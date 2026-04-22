@@ -30,7 +30,7 @@ export async function parseFilenames(filenames: string[]) {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
+      model: "gemini-3-flash-preview",
       contents: PROMPT.replace("{{FILENAMES}}", filenames.join("\n")),
       config: {
         responseMimeType: "application/json"

@@ -183,11 +183,11 @@ const Library: React.FC = () => {
                 <Database className="w-8 h-8 text-black" />
               </div>
               <div>
-                <h1 className="text-5xl font-black text-white tracking-tighter leading-none">Vault</h1>
+                <h1 className="text-5xl font-black text-white tracking-tighter leading-none">Nodes</h1>
                 <div className="flex items-center gap-3 mt-4 text-white/30 text-[10px] font-black uppercase tracking-[0.3em]">
                   <Link to="/browse" className="hover:text-white transition-colors">Home</Link>
                   <ChevronRight className="w-3 h-3" />
-                  <span className="text-white">Collections & Storage</span>
+                  <span className="text-white">Phantom Pointers & Cloud Sync</span>
                 </div>
               </div>
             </div>
@@ -251,9 +251,9 @@ const Library: React.FC = () => {
                    </span>
                  </div>
                  <div className="flex items-center gap-3 text-white/20 text-[9px] font-medium uppercase tracking-widest">
-                    <span>{formatSize(vaultStats?.used || 0)} used</span>
+                    <span>Phantom Pointers: {vaultStats?.count || 0}</span>
                     <div className="w-1 h-1 rounded-full bg-white/10" />
-                    <span>{vaultStats?.count || 0} items</span>
+                    <span>bandwidth used: 0 B</span>
                  </div>
               </div>
 
@@ -291,33 +291,30 @@ const Library: React.FC = () => {
 
                 <div className="font-medium text-[10px] text-brand-blue/60 leading-loose uppercase space-y-4">
                   <div className="flex justify-between items-center border-b border-white/5 pb-3">
-                    <span className="text-white/20">Library Check...</span>
+                    <span className="text-white/20">Pointer Integrity...</span>
                     <span className="font-black text-green-500 flex items-center gap-3">
                       <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                      ONLINE
+                      SECURE
                     </span>
                   </div>
                   <div className="flex justify-between items-center border-b border-white/5 pb-3">
-                    <span className="text-white/20">Storage Used...</span>
+                    <span className="text-white/20">Cloud Library Sync...</span>
                     <div className="flex items-center gap-4">
-                      <span className="text-white tabular-nums">{vaultUsagePercent}% FULL</span>
-                      <div className="w-32 h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5 p-px">
-                        <div className="h-full bg-brand-blue rounded-full" style={{ width: `${vaultUsagePercent}%` }} />
-                      </div>
+                      <span className="text-white tabular-nums">ONLINE</span>
                     </div>
                   </div>
                   <div className="flex justify-between items-center border-b border-white/5 pb-3">
-                    <span className="text-white/20">Device Storage...</span>
-                    <span className="text-brand-orange">PRIVATE [ON_DEVICE]</span>
+                    <span className="text-white/20">Node Status...</span>
+                    <span className="text-brand-orange">PHANTOM [ZERO_STORAGE]</span>
                   </div>
                   <div className="flex justify-between gap-12 mt-12">
                     <div className="flex-1 p-6 bg-white/5 rounded-2xl border border-white/5 hover:border-brand-blue/30 transition-all group">
                       <h4 className="text-brand-blue font-black mb-2 flex items-center gap-2">
-                        <Activity className="w-3 h-3" />
-                        Private Collection
+                         <Star className="w-3 h-3" />
+                        Phantom Node
                       </h4>
                       <p className="font-sans italic text-sm text-white/40 normal-case leading-relaxed">
-                        Your library is kept strictly on this device. No media files leave your browser, ensuring complete privacy.
+                        This device serves as a "Phantom Node". No large video files are stored here. Instead, secure handles point to your local machine's drive for instant, zero-data playback.
                       </p>
                     </div>
                     <div className="flex flex-col gap-3">
@@ -326,14 +323,14 @@ const Library: React.FC = () => {
                         className="px-6 py-4 rounded-xl border border-white/5 text-white/40 hover:text-white hover:border-white/20 transition-all flex items-center gap-3 text-[9px] font-black"
                       >
                         <RefreshCw className="w-4 h-4" />
-                        SYNC DETAILS
+                        SYSTEM RE-SYNC
                       </button>
                       <button 
                          onClick={() => setIsCleaning(true)}
                          className="px-6 py-4 rounded-xl border border-red-500/20 text-red-500/40 hover:text-red-500 hover:bg-red-500/5 transition-all flex items-center gap-3 text-[9px] font-black"
                       >
                         <Trash2 className="w-4 h-4" />
-                        PURGE COLLECTION
+                        PURGE NODE
                       </button>
                     </div>
                   </div>

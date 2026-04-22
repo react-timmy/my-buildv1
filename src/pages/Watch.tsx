@@ -539,6 +539,16 @@ export default function Watch() {
               onClick={async () => {
                 const success = await relinkItem(movieId!);
                 if (success) {
+                  try {
+                    const file = await getFile(movieId!);
+                    if (file) {
+                      setVideoSrc(URL.createObjectURL(file));
+                      setIsLockedBySystem(false);
+                      setError(null);
+                      addToast("Phantom node linked successfully!", "success");
+                      return;
+                    }
+                  } catch (e) {}
                   window.location.reload(); 
                 }
               }}
