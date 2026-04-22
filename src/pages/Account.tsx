@@ -18,7 +18,7 @@ const AVATARS = [
 
 export default function Account() {
   const { user, profiles, activeProfile, setActiveProfile, logout, addProfile, deleteProfile, updateProfile } = useAuth();
-  const { clearLibrary, wipeSavedLibrary } = useLibrary();
+  const { clearLibrary, wipeSavedLibrary, movieCount, showCount, isPro, setIsPro } = useLibrary();
   const [isWipeConfirmOpen, setIsWipeConfirmOpen] = useState(false);
   const [isWipeSavedLibraryConfirmOpen, setIsWipeSavedLibraryConfirmOpen] = useState(false);
   const [isDeleteAccountOpen, setIsDeleteAccountOpen] = useState(false);
@@ -123,6 +123,72 @@ export default function Account() {
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8">
           <div className="space-y-8">
+          
+          {/* SUBSCRIPTION & QUOTA CARD */}
+          <section className="bg-gradient-to-br from-brand-orange/20 to-transparent border border-brand-orange/20 rounded-3xl p-8 relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-8 opacity-5">
+               <HardDrive className="w-32 h-32" />
+             </div>
+             <div className="relative z-10">
+               <div className="flex items-center justify-between mb-8">
+                 <div className="space-y-1">
+                   <h3 className="text-2xl font-black tracking-tighter">
+                     {isPro ? 'Pro Member' : 'Free Tier'}
+                   </h3>
+                   <p className="text-xs text-white/40 font-bold uppercase tracking-widest">
+                     {isPro ? 'Unlimited AI Cataloging' : 'Personal Use Only'}
+                   </p>
+                 </div>
+                 <button 
+                   onClick={() => setIsPro(!isPro)}
+                   className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                     isPro 
+                       ? 'bg-white/10 text-white hover:bg-white/20' 
+                       : 'bg-brand-orange text-white hover:shadow-[0_0_30px_rgba(255,107,0,0.4)]'
+                   }`}
+                 >
+                   {isPro ? 'Manage Billing' : 'Upgrade to Pro'}
+                 </button>
+               </div>
+
+               <div className="grid grid-cols-2 gap-4">
+                 <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
+                    <p className="text-[9px] font-black text-white/20 uppercase tracking-widest mb-1">Movies</p>
+                    <div className="flex items-end gap-2">
+                       <span className="text-2xl font-black">{movieCount}</span>
+                       <span className="text-xs text-white/20 pb-1">/ {isPro ? '∞' : '10'}</span>
+                    </div>
+                    <div className="mt-3 h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                       <div 
+                        className={`h-full transition-all duration-1000 ${movieCount >= 10 && !isPro ? 'bg-red-500' : 'bg-brand-orange'}`}
+                        style={{ width: `${Math.min((movieCount / (isPro ? movieCount : 10)) * 100, 100)}%` }} 
+                       />
+                    </div>
+                 </div>
+
+                 <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
+                    <p className="text-[9px] font-black text-white/20 uppercase tracking-widest mb-1">TV Shows</p>
+                    <div className="flex items-end gap-2">
+                       <span className="text-2xl font-black">{showCount}</span>
+                       <span className="text-xs text-white/20 pb-1">/ {isPro ? '∞' : '10'}</span>
+                    </div>
+                    <div className="mt-3 h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                       <div 
+                        className={`h-full transition-all duration-1000 ${showCount >= 10 && !isPro ? 'bg-red-500' : 'bg-brand-orange'}`}
+                        style={{ width: `${Math.min((showCount / (isPro ? showCount : 10)) * 100, 100)}%` }} 
+                       />
+                    </div>
+                 </div>
+               </div>
+               
+               {!isPro && (movieCount >= 10 || showCount >= 10) && (
+                 <p className="mt-4 text-[10px] text-red-400 font-bold uppercase tracking-widest animate-pulse">
+                   Free limit reached. Identifying new items is paused.
+                 </p>
+               )}
+             </div>
+          </section>
+
          {/* Profile Card Overlay */}
         <section className="p-6 bg-white/5 backdrop-blur-xl border border-white/5 rounded-3xl flex items-center gap-4">
            <div className="w-16 h-16 bg-gradient-to-br from-brand-orange to-brand-orange/50 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-lg overflow-hidden">

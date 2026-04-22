@@ -38,6 +38,10 @@ interface VaultStats {
 interface LibraryContextType {
   library: LibraryItem[];
   groups: LibraryGroup[];
+  isPro: boolean;
+  setIsPro: (val: boolean) => void;
+  movieCount: number;
+  showCount: number;
   isScanning: boolean;
   setIsScanning: (scanning: boolean) => void;
   isVaulting: boolean;
@@ -75,6 +79,14 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { activeProfile } = useAuth();
   const [library, setLibrary] = useState<LibraryItem[]>([]);
   const [isScanning, setIsScanning] = useState(false);
+  const [isPro, setIsPro] = useState(() => {
+    return localStorage.getItem('filmsort_pro_status') === 'true';
+  });
+  
+  useEffect(() => {
+    localStorage.setItem('filmsort_pro_status', isPro.toString());
+  }, [isPro]);
+
   const [isVaulting, setIsVaulting] = useState(false);
   const [isInitialSyncing, setIsInitialSyncing] = useState(true);
   const [vaultStats, setVaultStats] = useState<VaultStats | null>({ used: 0, quota: 100 * 1024 * 1024 * 1024, count: 0 }); // 100GB dummy quota for Phantom UI
@@ -86,8 +98,33 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const toastDebounceRef = React.useRef<{ message: string; timestamp: number } | null>(null);
 
   const groups = useMemo(() => groupLibrary(library), [library]);
+  const movieCount = useMemo(() => groups.filter(g => g.type === 'movie').length, [groups]);
+  const showCount = useMemo(() => groups.filter(g => g.type === 'series').length, [groups]);
 
   const handleKey = activeProfile ? `filmsort_dir_handle_${activeProfile.id}` : `filmsort_dir_handle_default`;
+
+  const addToast = useCallback((message: string, type: any = 'info') => {
+    const now = Date.now();
+    if (
+      toastDebounceRef.current && 
+      toastDebounceRef.current.message === message && 
+      now - toastDebounceRef.current.timestamp < 100
+    ) {
+      return; 
+    }
+    toastDebounceRef.current = { message, timestamp: now };
+    
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+    
+    setTimeout(() => {
+      setToasts(currentToasts => currentToasts.filter(t => t.id !== id));
+    }, 5000);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
 
   // Synchronize Library with OPFS and Cloud Sync on mount
   const syncWithVaultContents = useCallback(async () => {
@@ -256,9 +293,83 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [library, activeProfile?.id, isInitialSyncing]);
 
   const relinkLibrary = useCallback(async () => {
-     // No longer needed for OPFS-only storage as it has no permission link revocation
-     return true;
-  }, []);
+    try {
+      if (!('showDirectoryPicker' in window)) {
+        addToast('Directory syncing is not supported in this browser. Please link files individually.', 'info');
+        return false;
+      }
+      
+      let dirHandle;
+      try {
+        dirHandle = await (window as any).showDirectoryPicker({
+          mode: 'read'
+        });
+      } catch (err: any) {
+        if (err.name === 'AbortError') return false;
+        throw err;
+      }
+
+      setIsScanning(true);
+      setScanProgress({ phase: 'scanning', current: 0, total: library.length, label: 'Scanning directory for lost media...' });
+
+      // Helper to recursively find video files in the selected directory
+      const findVideoHandles = async (dirHandle: any, path: string = ''): Promise<{name: string, handle: any}[]> => {
+        let results: {name: string, handle: any}[] = [];
+        try {
+          for await (const entry of dirHandle.values()) {
+            if (entry.kind === 'file') {
+              if (entry.name.match(/\.(mp4|mkv|avi|mov|webm)$/i)) {
+                results.push({ name: entry.name, handle: entry });
+              }
+            } else if (entry.kind === 'directory') {
+              // Optionally recursively search, but depth limited just in case
+              const subResults = await findVideoHandles(entry, `${path}${entry.name}/`);
+              results = results.concat(subResults);
+            }
+          }
+        } catch (e) {
+          console.warn('Could not read some directory contents', e);
+        }
+        return results;
+      };
+
+      const videoHandles = await findVideoHandles(dirHandle);
+      let recoveredCount = 0;
+
+      // Match found handles with library items
+      for (const vHandle of videoHandles) {
+        const matchingItem = library.find(item => item.filename === vHandle.name && item.status !== 'processing');
+        if (matchingItem) {
+          await saveHandle(matchingItem.id, vHandle.handle);
+          recoveredCount++;
+          
+          setLibrary(prev => prev.map(p => {
+             if (p.id === matchingItem.id) {
+               return { ...p, status: 'ready' as const };
+             }
+             return p;
+          }));
+        }
+      }
+
+      setIsScanning(false);
+      setScanProgress({ phase: 'idle', current: 0, total: 0 });
+
+      if (recoveredCount > 0) {
+        addToast(`Successfully re-linked ${recoveredCount} media files!`, 'success');
+        return true;
+      } else {
+        addToast('No matching files found in the selected folder.', 'error');
+        return false;
+      }
+
+    } catch (e: any) {
+      console.error("Relink directory error", e);
+      addToast('Failed to sync directory', 'error');
+      setIsScanning(false);
+      return false;
+    }
+  }, [library, addToast]);
 
   // Refresh Vault Stats
   const refreshVaultStats = useCallback(async () => {
@@ -348,29 +459,6 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     navigate(`/watch/local/${id}`);
   }, [library]);
 
-  const addToast = useCallback((message: string, type: any = 'info') => {
-    const now = Date.now();
-    if (
-      toastDebounceRef.current && 
-      toastDebounceRef.current.message === message && 
-      now - toastDebounceRef.current.timestamp < 100
-    ) {
-      return; 
-    }
-    toastDebounceRef.current = { message, timestamp: now };
-    
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts(prev => [...prev, { id, message, type }]);
-    
-    setTimeout(() => {
-      setToasts(currentToasts => currentToasts.filter(t => t.id !== id));
-    }, 5000);
-  }, []);
-
-  const removeToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, []);
-
   const processItems = async (items: Array<{filename: string, file: File, relativePath: string, handle?: FileSystemFileHandle}>) => {
     setIsScanning(true);
     abortControllerRef.current = new AbortController();
@@ -388,6 +476,18 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       
       return true;
     });
+
+    // BUSINESS RULE: Free Tier Limits
+    const MAX_FREE_MOVIES = 10;
+    const MAX_FREE_SHOWS = 10;
+
+    if (!isPro) {
+      if (movieCount >= MAX_FREE_MOVIES || showCount >= MAX_FREE_SHOWS) {
+        addToast('Free plan limit reached (10 Movies / 10 TV Shows). Upgrade to Pro to add more.', 'error');
+        setIsScanning(false);
+        return;
+      }
+    }
 
     if (filteredItems.length === 0 && items.length > 0) {
       addToast('No valid movies or TV shows identified', 'error');
@@ -870,6 +970,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <LibraryContext.Provider value={{
       library, groups, isScanning, setIsScanning, isVaulting, isInitialSyncing, vaultStats, scanProgress, processingCount: 0, error: null, hasLibrary: library.length > 0,
+      isPro, setIsPro, movieCount, showCount,
       needsRelink: false, relinkLibrary, playItem,
       scanFiles, pickFiles, getFile, updateProgress,
       toggleInMyList, toggleLiked, cancelScan, relinkItem,

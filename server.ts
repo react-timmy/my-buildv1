@@ -7,6 +7,7 @@ import path from 'path';
 import mongoose from 'mongoose';
 import tmdbRoutes from './src/routes/tmdb.ts';
 import authRoutes from './src/routes/auth.ts';
+import aiRoutes from './src/routes/ai.ts';
 import { fetchDailyTrending } from './src/lib/trendingService.ts';
 
 dotenv.config();
@@ -40,6 +41,7 @@ async function startServer() {
   });
 
   app.use('/api/tmdb', tmdbRoutes);
+  app.use('/api/ai', aiRoutes);
   
   // Trending route
   app.get('/api/trending', async (req, res) => {

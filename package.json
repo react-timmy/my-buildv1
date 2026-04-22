@@ -23,6 +23,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "esbuild": "^0.28.0",
+    "expo-image": "^55.0.9",
     "express": "^4.22.1",
     "idb-keyval": "^6.2.2",
     "jsonwebtoken": "^9.0.3",
