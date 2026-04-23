@@ -124,14 +124,19 @@ export function groupLibrary(items: LibraryItem[]): LibraryGroup[] {
   const groups: Record<string, LibraryGroup> = {};
 
   items.forEach(item => {
-    const key = item.meta.folderName || item.meta.cleanTitle;
+    // Group by TMDB ID if available, otherwise fallback to folderName or cleanTitle
+    const key = item.meta.tmdbId ? `tmdb_${item.meta.tmdbId}` : (item.meta.folderName || item.meta.cleanTitle);
     if (!groups[key]) {
       groups[key] = {
         title: item.meta.cleanTitle,
         type: item.meta.type as any,
-        key: key,
+        key: key, // Ensure key is a string
         items: []
       };
+    }
+    // Update the group title to the shortest/cleanest one (e.g. "Absolute Duo" vs "Absolute Duo E08")
+    if (item.meta.cleanTitle && item.meta.cleanTitle.length < groups[key].title.length) {
+       groups[key].title = item.meta.cleanTitle;
     }
     groups[key].items.push(item);
   });

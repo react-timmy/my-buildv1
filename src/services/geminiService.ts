@@ -1,6 +1,17 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+let ai: GoogleGenAI | null = null;
+
+function getAiClient(): GoogleGenAI {
+  if (!ai) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not defined.");
+    }
+    ai = new GoogleGenAI({ apiKey });
+  }
+  return ai;
+}
 
 const PROMPT = `
 You are an expert media cataloger. Your task is to parse media filenames and extract structured metadata.
@@ -29,7 +40,8 @@ export async function parseFilenames(filenames: string[]) {
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const client = getAiClient();
+    const response = await client.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: PROMPT.replace("{{FILENAMES}}", filenames.join("\n")),
       config: {

@@ -83,7 +83,19 @@ const Library: React.FC = () => {
   };
 
   const handleAddClick = () => {
-    fileInputRef.current?.click();
+    // Correctly trigger the input element
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.multiple = true;
+    fileInput.accept = 'video/*,.mkv';
+    fileInput.onchange = (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (files) scanFiles(files);
+      document.body.removeChild(fileInput);
+    };
+    fileInput.style.display = 'none';
+    document.body.appendChild(fileInput);
+    fileInput.click();
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,20 +153,12 @@ const Library: React.FC = () => {
 
   return (
     <div 
-      className="min-h-screen bg-[#050505] selection:bg-brand-orange/30 pt-12"
+      className="min-h-screen bg-[#050505] selection:bg-brand-orange/30 pt-6"
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
     >
-      {/* Hidden File Input Fallback */}
-      <input 
-        type="file" 
-        multiple 
-        ref={fileInputRef} 
-        className="hidden" 
-        accept="video/*,.mkv" 
-        onChange={handleFileSelect}
-      />
+      {/* Hidden File Input Fallback (Now programmatic) */}
 
       {/* Drag Overlay */}
       <AnimatePresence>
@@ -176,18 +180,18 @@ const Library: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-6 md:px-12 pb-32">
         {/* Header Section */}
-        <div className="flex flex-col gap-10 mb-16">
+        <div className="flex flex-col gap-6 mb-10">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="flex items-center gap-6">
               <div className="w-16 h-16 bg-white flex items-center justify-center rounded-3xl shadow-[0_0_40px_rgba(255,255,255,0.1)]">
                 <Database className="w-8 h-8 text-black" />
               </div>
-              <div>
-                <h1 className="text-5xl font-black text-white tracking-tighter leading-none">Nodes</h1>
-                <div className="flex items-center gap-3 mt-4 text-white/30 text-[10px] font-black uppercase tracking-[0.3em]">
+              <div className="flex flex-col gap-1">
+                <h1 className="text-5xl font-black text-white tracking-tighter leading-none">Library</h1>
+                <div className="flex items-center gap-3 text-white/50 text-[10px] font-black uppercase tracking-[0.3em]">
                   <Link to="/browse" className="hover:text-white transition-colors">Home</Link>
                   <ChevronRight className="w-3 h-3" />
-                  <span className="text-white">Phantom Pointers & Cloud Sync</span>
+                  <span className="text-white">All Items</span>
                 </div>
               </div>
             </div>
@@ -214,7 +218,7 @@ const Library: React.FC = () => {
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-8 border-b border-white/5 pb-10">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/5 pb-6">
             <div className="flex items-center gap-2 md:gap-4 p-1.5 bg-white/5 rounded-2xl border border-white/5">
               {[
                 { id: 'all', label: 'All Items' },
@@ -243,28 +247,25 @@ const Library: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-8">
-              <div className="flex flex-col items-end gap-1">
-                 <div className="flex items-center gap-3">
-                   <div className={`w-2 h-2 rounded-full ${isScanning || isVaulting ? 'bg-brand-orange animate-pulse' : 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]'}`} />
-                   <span className="text-[10px] font-black text-white uppercase tracking-widest">
-                     {activeProfile?.name || 'Authorized'} // {isScanning || isVaulting ? 'Updating' : 'Ready'}
-                   </span>
-                 </div>
-                 <div className="flex items-center gap-3 text-white/20 text-[9px] font-medium uppercase tracking-widest">
-                    <span>Phantom Pointers: {vaultStats?.count || 0}</span>
-                    <div className="w-1 h-1 rounded-full bg-white/10" />
-                    <span>bandwidth used: 0 B</span>
-                 </div>
+              <div className="flex items-center gap-4">
+                 <button 
+                  onClick={() => setShowVaultDetails(!showVaultDetails)}
+                  className={`p-3 rounded-xl border transition-all ${showVaultDetails ? 'bg-brand-blue/10 border-brand-blue text-brand-blue' : 'glass-card border-white/5 text-white/50 hover:text-white'}`}
+                >
+                  <Activity className="w-5 h-5" />
+                </button>
+                <div className="flex flex-col items-end gap-1">
+                   <div className="flex items-center gap-3">
+                     <div className={`w-2 h-2 rounded-full ${isScanning ? 'bg-brand-orange animate-pulse' : 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]'}`} />
+                     <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                       {activeProfile?.name || 'Authorized'} // {isScanning ? 'Updating' : 'Ready'}
+                     </span>
+                   </div>
+                   <div className="flex items-center gap-3 text-white/40 text-[9px] font-medium uppercase tracking-widest">
+                      <span>{groups.length} Total Nodes</span>
+                   </div>
+                </div>
               </div>
-
-              <div className="h-10 w-px bg-white/10" />
-
-              <button 
-                onClick={() => setShowVaultDetails(!showVaultDetails)}
-                className={`p-3 rounded-xl border transition-all ${showVaultDetails ? 'bg-brand-blue/10 border-brand-blue text-brand-blue' : 'glass-card border-white/5 text-white/30 hover:text-white'}`}
-              >
-                <Activity className="w-5 h-5" />
-              </button>
             </div>
           </div>
         </div>
@@ -311,10 +312,10 @@ const Library: React.FC = () => {
                     <div className="flex-1 p-6 bg-white/5 rounded-2xl border border-white/5 hover:border-brand-blue/30 transition-all group">
                       <h4 className="text-brand-blue font-black mb-2 flex items-center gap-2">
                          <Star className="w-3 h-3" />
-                        Phantom Node
+                         Media Node
                       </h4>
                       <p className="font-sans italic text-sm text-white/40 normal-case leading-relaxed">
-                        This device serves as a "Phantom Node". No large video files are stored here. Instead, secure handles point to your local machine's drive for instant, zero-data playback.
+                        This device is connected to your media server, providing instant, server-side playback.
                       </p>
                     </div>
                     <div className="flex flex-col gap-3">
@@ -497,10 +498,10 @@ const Library: React.FC = () => {
               </div>
 
               {(filteredMovies.length === 0 && filteredTV.length === 0) && (
-                 <div className="text-center py-40 bg-white/[0.02] rounded-[3rem] border border-white/5">
-                    <Search className="w-16 h-16 text-white/5 mx-auto mb-6" />
-                    <h3 className="text-2xl font-black text-white/20 tracking-tighter uppercase tracking-[0.2em]">Your collection is empty</h3>
-                    <p className="text-white/10 text-xs mt-4">Add your movie and show files to get started</p>
+                 <div className="text-center py-40 glass-card rounded-[3rem] border border-white/10">
+                    <Search className="w-16 h-16 text-white/20 mx-auto mb-6" />
+                    <h3 className="text-2xl font-black text-white/70 tracking-tighter uppercase tracking-[0.2em]">Your collection is empty</h3>
+                    <p className="text-white/40 text-xs mt-4 font-bold tracking-widest uppercase">Add your movie and show files to get started</p>
                  </div>
               )}
             </>
@@ -580,7 +581,7 @@ const Library: React.FC = () => {
 
       {/* Global Scanning Monitor Popup (Previous UX Feature) */}
       <AnimatePresence>
-        {(isScanning || isVaulting) && (
+        {(isScanning) && (
           <motion.div 
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -595,7 +596,7 @@ const Library: React.FC = () => {
                   </div>
                   <div>
                     <h4 className="text-white font-black text-xs uppercase tracking-widest">
-                      {isVaulting ? 'Saving to collection' : 'Processing files'}
+                      Processing files
                     </h4>
                     <p className="text-white/40 text-[10px] font-medium uppercase truncate max-w-[150px] md:max-w-xs transition-all">
                       {scanToLayman(scanProgress.phase, scanProgress.label)}

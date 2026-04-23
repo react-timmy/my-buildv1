@@ -3,19 +3,18 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Play, Pause, RotateCcw, RotateCw, 
   Volume2, VolumeX, Maximize, Minimize, Layers,
-  MessageSquare, SkipForward, Loader, ChevronRight, AlertCircle, HardDrive,
-  Lock, Unlock, Gauge, ScanLine
+  MessageSquare, SkipForward, Loader, ChevronRight, AlertCircle, Gauge, ScanLine, Lock, Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from '../lib/axios';
 import { useLibrary } from '../context/LibraryContext';
 import { useAuth } from '../context/AuthContext';
-import { getHandle, verifyPermission } from '../lib/idb';
+import { NativeBridge } from '../services/nativeBridge';
 
 export default function Watch() {
   const { type, movieId } = useParams<{ type: string; movieId: string }>();
   const navigate = useNavigate();
-  const { library, updateProgress, getFile, relinkItem, addToast } = useLibrary();
+  const { library, updateProgress } = useLibrary();
   const { user } = useAuth();
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -28,7 +27,6 @@ export default function Watch() {
   const [subtitleName, setSubtitleName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isLockedBySystem, setIsLockedBySystem] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [showControls, setShowControls] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
@@ -129,48 +127,66 @@ export default function Watch() {
       setError(null);
       
       try {
-        if (type === 'local') {
-          // Find item without adding entire 'library' array to useEffect deps
-          const item = library.find(li => li.id === activeMovieId);
-          if (!item) throw new Error("Item not found in library.");
-          
-          setMetadata(item.meta);
-          
-          // Priority 1: Local File System (Instant)
-          const file = await getFile(activeMovieId!);
-          if (file) {
-            setVideoSrc(URL.createObjectURL(file));
-            setLoading(false);
-            return;
-          }
-
-          // Check if it's a Phantom link that needs permission
-          const handle = await getHandle(activeMovieId!);
-          if (handle) {
-            setIsLockedBySystem(true);
-            setLoading(false);
-            return;
-          }
-
-          // Priority 2: Cloudinary/Firebase Direct URL (Streaming fallback)
-          if (item.videoUrl) {
-            setVideoSrc(item.videoUrl);
-            setLoading(false);
-            return;
-          }
-
-          // Error handling
-          const errorMsg = item.status === 'processing' 
-            ? "Collection in Sync: Your media is currently being analyzed and identified by the AI. This usually takes less than 30 seconds." 
-            : "Device Link Not Found: This movie is in your cloud library, but it hasn't been linked on this specific device yet. Click the button below to point FilmSort to the file on your local drive.";
-          throw new Error(errorMsg);
-        } else {
-          // Standard TMDB logic
-          const endpoint = type === 'tv' ? `/tmdb/tv/${activeMovieId}` : `/tmdb/movie/${activeMovieId}`;
-          const response = await axios.get(endpoint);
-          setMetadata(response.data);
-          setVideoSrc('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
+        const item = library.find(li => li.id === activeMovieId);
+        if (!item) throw new Error("Item not found in library.");
+        
+        setMetadata(item.meta);
+        
+        // Priority 1: Native Mobile Path (VLC Logic)
+        if (NativeBridge.isNative() && item.relativePath) {
+          // If relativePath is a full filesystem path (common in wrapped apps)
+          const nativeUrl = NativeBridge.getFileUrl({
+             name: item.filename,
+             path: item.relativePath,
+             size: 0,
+             type: 'video',
+             lastModified: item.addedAt || 0
+          });
+          setVideoSrc(nativeUrl);
           setLoading(false);
+          return;
+        }
+
+        // Priority 2: Direct File object (in-memory, e.g. after just scanning)
+        if (item.file) {
+          const url = URL.createObjectURL(item.file);
+          setVideoSrc(url);
+          setLoading(false);
+          return;
+        } 
+        
+        // Priority 2: File System Handle (persistent across sessions, but needs permission)
+        if (item.handle) {
+          try {
+            // Verify permission
+            const options = { mode: 'read' as const };
+            if (await (item.handle as any).queryPermission(options) === 'granted' || 
+                await (item.handle as any).requestPermission(options) === 'granted') {
+              const file = await item.handle.getFile();
+              const url = URL.createObjectURL(file);
+              setVideoSrc(url);
+              setLoading(false);
+              return;
+            }
+          } catch (pickerErr) {
+            console.warn("FS Handle access failed:", pickerErr);
+          }
+        }
+
+        // Priority 3: External URL (Firebase/Cloud Storage)
+        if (item.videoUrl) {
+          setVideoSrc(item.videoUrl);
+          setLoading(false);
+          return;
+        }
+
+        // Priority 4: Server Streaming (only if it's a real DB ID, not a 'phantom' ID)
+        if (!activeMovieId.startsWith('phantom_')) {
+          setVideoSrc(`/api/videos/stream/${activeMovieId}`);
+          setLoading(false);
+        } else {
+          // If it's a phantom ID and we reached here, the local file is missing
+          throw new Error("Local file is no longer accessible. Please re-upload or re-link the folder containing your media.");
         }
       } catch (err: any) {
         setError(err.message || "Failed to load video.");
@@ -240,7 +256,8 @@ export default function Watch() {
         vttContent = 'WEBVTT\n\n' + text;
       }
 
-      const blob = new Blob([vttContent], { type: 'text/vtt' });
+      const blob = typeof Blob !== 'undefined' ? new Blob([vttContent], { type: 'text/vtt' }) : null;
+      if (!blob) throw new Error("Blob constructor not supported.");
       const url = URL.createObjectURL(blob);
       
       setSubtitleSrc(prev => {
@@ -468,23 +485,7 @@ export default function Watch() {
     };
   }, []);
 
-  const handleUnlock = async () => {
-    try {
-      const handle = await getHandle(movieId!);
-      if (handle) {
-        const granted = await verifyPermission(handle, true);
-        if (granted) {
-          const file = await handle.getFile();
-          setVideoSrc(URL.createObjectURL(file));
-          setIsLockedBySystem(false);
-          addToast("Phantom link successfully re-established", "success");
-        }
-      }
-    } catch (err: any) {
-      console.error("Unlock failed", err);
-      addToast("Failed to unlock file access", "error");
-    }
-  };
+  // Removed local file access logic
 
   if (loading) {
     return (
@@ -494,28 +495,19 @@ export default function Watch() {
     );
   }
 
-  if (isLockedBySystem || error) {
-    const item = library.find(li => li.id === movieId);
-    const isMissing = item?.status === 'missing';
-
+  if (error) {
     return (
       <div className="h-screen w-screen bg-black flex flex-col items-center justify-center p-8 text-center text-white">
         <div className="w-24 h-24 bg-brand-orange/10 rounded-full flex items-center justify-center mb-8 shadow-[0_0_80px_rgba(255,107,0,0.2)]">
-          {isLockedBySystem ? (
-            <Lock className="w-12 h-12 text-brand-orange" />
-          ) : (
             <AlertCircle className="w-12 h-12 text-red-500" />
-          )}
         </div>
         
         <h2 className="text-3xl font-black mb-4 tracking-tighter">
-          {isLockedBySystem ? "Permission Required" : "Something went wrong"}
+          Something went wrong
         </h2>
         
         <p className="text-white/40 mb-10 max-w-md text-sm leading-relaxed uppercase tracking-widest font-bold">
-          {isLockedBySystem 
-            ? "Your browser session has expired the file access link. To ensure zero-bandwidth playback from your local drive, the browser requires a one-time permission grant." 
-            : (error || "Failed to load video.")}
+          {error || "Failed to load video."}
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4">
@@ -525,39 +517,6 @@ export default function Watch() {
           >
             Go Back
           </button>
-          
-          {isLockedBySystem ? (
-             <button 
-                onClick={handleUnlock}
-                className="px-10 py-4 bg-brand-orange text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[0_0_30px_rgba(255,107,0,0.3)] hover:shadow-[0_0_50px_rgba(255,107,0,0.5)] active:scale-95 transition-all flex items-center gap-3"
-             >
-                <Unlock className="w-4 h-4" />
-                Unlock Access
-             </button>
-          ) : (
-            <button 
-              onClick={async () => {
-                const success = await relinkItem(movieId!);
-                if (success) {
-                  try {
-                    const file = await getFile(movieId!);
-                    if (file) {
-                      setVideoSrc(URL.createObjectURL(file));
-                      setIsLockedBySystem(false);
-                      setError(null);
-                      addToast("Phantom node linked successfully!", "success");
-                      return;
-                    }
-                  } catch (e) {}
-                  window.location.reload(); 
-                }
-              }}
-              className="px-10 py-4 bg-brand-orange text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[0_0_30px_rgba(255,107,0,0.3)] hover:shadow-[0_0_50px_rgba(255,107,0,0.5)] active:scale-95 transition-all flex items-center gap-3"
-            >
-              <ScanLine className="w-4 h-4" />
-              Link Local File & Play
-            </button>
-          )}
         </div>
       </div>
     );
@@ -578,45 +537,46 @@ export default function Watch() {
         className="hidden" 
       />
       
-      <video
-        ref={videoRef}
-        src={videoSrc || ''}
-        className={`h-full w-full ${isCover ? 'object-cover' : 'object-contain'} cursor-none`}
-        autoPlay
-        muted={isMuted}
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleLoadedMetadata}
-        onPlay={() => setIsPlaying(true)}
-        onPause={handlePause}
-        onEnded={handleVideoEnded}
-        onClick={undefined} // handled mathematically by pointer events up top now
-        onError={() => {
-          console.error("Video Playback Error for source:", videoSrc);
-          if (videoSrc?.includes('/api/drive/stream')) {
-            setError("The video stream is currently being blocked or processed by Google Drive. This is common for newly uploaded files (Google takes 1-2 minutes to scan them) or if your session has expired. Try clicking 'Back' and then Play again in a minute.");
-          } else {
-            setError("The video element has no supported sources or the file is corrupt. Please check if your browser supports this video format.");
-          }
-        }}
-        style={{ 
-          cursor: showControls ? 'default' : 'none',
-          filter: `contrast(${videoContrast}%)`
-        }}
-      >
-        {subtitleSrc && (
-          <track 
-            kind="subtitles" 
-            src={subtitleSrc} 
-            srcLang="en" 
-            label="English" 
-            default 
-          />
-        )}
-      </video>
+      <div className="absolute inset-0 bg-black flex items-center justify-center">
+        <video
+          ref={videoRef}
+          src={videoSrc || ''}
+          autoPlay
+          muted={isMuted}
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleLoadedMetadata}
+          onPlay={() => setIsPlaying(true)}
+          onPause={handlePause}
+          onEnded={handleVideoEnded}
+          className={`h-full w-full z-10 transition-all duration-700 ${isCover ? 'object-cover' : 'object-contain'}`}
+          style={{ 
+            cursor: showControls ? 'default' : 'none',
+            filter: `contrast(${videoContrast}%)`
+          }}
+          onError={() => {
+            console.error("Video Playback Error for source:", videoSrc);
+            if (videoSrc?.includes('/api/drive/stream')) {
+              setError("The video stream is currently being blocked or processed by Google Drive. This is common for newly uploaded files (Google takes 1-2 minutes to scan them) or if your session has expired. Try clicking 'Back' and then Play again in a minute.");
+            } else {
+              setError("The video element has no supported sources or the file is corrupt. Please check if your browser supports this video format.");
+            }
+          }}
+        >
+          {subtitleSrc && typeof Blob !== 'undefined' && (
+            <track 
+              kind="subtitles" 
+              src={subtitleSrc} 
+              srcLang="en" 
+              label="English" 
+              default 
+            />
+          )}
+        </video>
+      </div>
 
       {/* Gesture Interaction Zones */}
       {!isLocked && (
-        <div className="absolute inset-0 z-5 flex" style={{ touchAction: 'none' }}>
+        <div className="absolute inset-0 z-20 flex" style={{ touchAction: 'none' }}>
           <div 
             className="flex-1" 
             onPointerDown={(e) => handlePointerDown(e, 'left')}
@@ -653,7 +613,7 @@ export default function Watch() {
             <span className="text-white text-xs font-bold uppercase tracking-widest">{activeGesture === 'volume' ? 'Volume' : 'Contrast'}</span>
             <div className="w-2 h-32 bg-white/20 rounded-full overflow-hidden flex flex-col justify-end">
               <div 
-                className="w-full bg-brand-orange transition-all duration-75"
+                className="w-full bg-orange-500 transition-all duration-75"
                 style={{ height: `${gestureValue}%` }}
               />
             </div>
@@ -704,17 +664,17 @@ export default function Watch() {
         )}
       </AnimatePresence>
 
-      {/* Layered Atmospherics (Recipe 7) */}
+      {/* Original Layered Controls */}
       <AnimatePresence>
         {showControls && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-10 flex flex-col justify-between"
+            className="absolute inset-0 z-40 flex flex-col justify-between pointer-events-none"
           >
-            {/* Top Bar - Glassmorphism */}
-            <div className={`flex items-center gap-6 px-4 md:px-12 pt-12 pb-24 bg-gradient-to-b from-black/90 via-black/40 to-transparent ${isLocked ? 'justify-start' : ''}`}>
+            {/* Top Bar */}
+            <div className={`flex items-center gap-6 px-4 md:px-12 pt-12 pb-24 bg-gradient-to-b from-black/90 via-black/40 to-transparent pointer-events-auto ${isLocked ? 'justify-start' : ''}`}>
               <button 
                 onClick={handleBack}
                 className={`text-white hover:scale-110 transition p-2 bg-white/10 rounded-full hover:bg-white/20 ${isLocked ? 'hidden' : ''}`}
@@ -724,9 +684,9 @@ export default function Watch() {
               
               <button 
                  onClick={() => setIsLocked(!isLocked)}
-                 className="text-white hover:scale-110 transition p-2 bg-white/10 rounded-full hover:bg-white/20 relative z-20 pointer-events-auto"
+                 className="text-white hover:scale-110 transition p-2 bg-white/10 rounded-full hover:bg-white/20 relative z-50 pointer-events-auto"
               >
-                 {isLocked ? <Lock className="w-8 h-8 md:w-10 md:h-10 text-brand-orange" /> : <Unlock className="w-8 h-8 md:w-10 md:h-10" />}
+                 {isLocked ? <Lock className="w-8 h-8 md:w-10 md:h-10 text-orange-500" /> : <Unlock className="w-8 h-8 md:w-10 md:h-10" />}
               </button>
 
               {!isLocked && (
@@ -739,7 +699,7 @@ export default function Watch() {
 
             {!isLocked && (
               <>
-                {/* Center HUD - Premium Interactive Feedback */}
+                {/* Center HUD */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="flex items-center justify-center gap-12 md:gap-24 pointer-events-auto">
                     <button 
@@ -770,8 +730,8 @@ export default function Watch() {
                   </div>
                 </div>
 
-                {/* Bottom Bar - Hardware Tool Mix (Recipe 3/8) */}
-                <div className="px-4 md:px-12 pb-12 bg-gradient-to-t from-black/95 via-black/60 to-transparent">
+                {/* Bottom Bar */}
+                <div className="px-4 md:px-12 pb-12 bg-gradient-to-t from-black/95 via-black/60 to-transparent pointer-events-auto">
                   <div className="relative flex-grow h-1 bg-white/20 rounded-full mb-8 group/seek">
                     <input 
                       type="range"
@@ -782,10 +742,10 @@ export default function Watch() {
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30"
                     />
                     <div 
-                      className="absolute top-0 left-0 h-full bg-brand-orange rounded-full pointer-events-none z-10 transition-[width] duration-100 ease-linear"
+                      className="absolute top-0 left-0 h-full bg-orange-500 rounded-full pointer-events-none z-10 transition-[width] duration-100 ease-linear"
                       style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
                     >
-                      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-brand-orange rounded-full scale-0 group-hover/seek:scale-100 transition-transform shadow-[0_0_15px_rgba(255,107,0,0.8)]" />
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-orange-500 rounded-full scale-0 group-hover/seek:scale-100 transition-transform shadow-[0_0_15px_rgba(255,107,0,0.8)]" />
                     </div>
                     <div className="absolute top-0 left-0 h-full bg-white/10 rounded-full w-full pointer-events-none" />
                   </div>
@@ -855,18 +815,6 @@ export default function Watch() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      <style>{`
-        input[type="range"]::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 0;
-          height: 0;
-        }
-        .hide-cursor {
-          cursor: none !important;
-        }
-      `}</style>
     </div>
   );
 }

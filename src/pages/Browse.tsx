@@ -350,20 +350,25 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.8 }}
-            className="relative z-10 w-[96vw] md:w-[94vw] 2xl:max-w-[1600px] aspect-[3/4] md:aspect-video lg:aspect-[21/9] rounded-3xl md:rounded-[3rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.4)] border border-white/10 mt-2 pointer-events-auto flex flex-col justify-end"
+            className="relative z-10 w-[96vw] md:w-[94vw] 2xl:max-w-[1600px] aspect-[3/4] md:aspect-video lg:aspect-[21/9] mt-2 pointer-events-auto flex flex-col justify-end"
             onClick={() => setSelectedItem(featuredItem)}
           >
-            {/* The sharp poster background inside the card */}
-            <img
-              src={featuredItem.meta.poster || featuredItem.meta.backdrop || `https://picsum.photos/seed/${featuredItem.id}/400/600`}
-              className="w-full h-full object-cover object-center absolute inset-0 z-0"
-              alt={featuredItem.meta.cleanTitle}
-              referrerPolicy="no-referrer"
-            />
+            {/* Massive Under-Shadow to radiate down and blend into the next section */}
+            <div className="absolute inset-x-4 -bottom-16 md:-bottom-24 h-32 md:h-48 bg-black/90 blur-[50px] md:blur-[80px] z-[-1] pointer-events-none" />
             
-            {/* Internal Bottom Gradient over the sharp image */}
-            <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent z-[1]" />
-            <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/60 to-transparent z-[1]" />
+            <div className="absolute inset-0 rounded-3xl md:rounded-[3rem] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.8)] border border-white/10 select-none">
+              {/* The sharp poster background inside the card */}
+              <img
+                src={featuredItem.meta.poster || featuredItem.meta.backdrop || `https://picsum.photos/seed/${featuredItem.id}/400/600`}
+                className="w-full h-full object-cover object-center absolute inset-0 z-0"
+                alt={featuredItem.meta.cleanTitle}
+                referrerPolicy="no-referrer"
+              />
+              
+              {/* Internal Bottom Gradient over the sharp image */}
+              <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent z-[1]" />
+              <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/60 to-transparent z-[1]" />
+            </div>
             
             <div className="relative z-10 w-full px-6 py-8 md:p-12 flex flex-col items-center text-center">
               {/* Top Badges (Top 10 & Rating) */}

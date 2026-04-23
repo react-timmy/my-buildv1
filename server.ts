@@ -7,6 +7,7 @@ import path from 'path';
 import mongoose from 'mongoose';
 import tmdbRoutes from './src/routes/tmdb.ts';
 import authRoutes from './src/routes/auth.ts';
+import videoRoutes from './src/routes/videos.ts';
 import aiRoutes from './src/routes/ai.ts';
 import { fetchDailyTrending } from './src/lib/trendingService.ts';
 
@@ -36,6 +37,7 @@ async function startServer() {
 
   // API Routes
   app.use('/api/auth', authRoutes);
+  app.use('/api/videos', videoRoutes);
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
   });
