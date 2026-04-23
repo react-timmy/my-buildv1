@@ -30,11 +30,8 @@ const LibraryItemSchema = new Schema({
 const ProfileSchema = new Schema({
   name: String,
   avatarUrl: String,
-  isKids: { type: Boolean, default: false },
-  library: [LibraryItemSchema],
-  myList: [Schema.Types.Mixed],
-  likedMovies: [Schema.Types.Mixed],
-  watching: [Schema.Types.Mixed]
+  isKids: Boolean,
+  library: [LibraryItemSchema]
 });
 
 const UserSchema = new Schema({
