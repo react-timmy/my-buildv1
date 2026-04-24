@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import axios from '../lib/axios';
 import { useLibrary } from '../context/LibraryContext';
 import { useAuth } from '../context/AuthContext';
+import { NativeBridge } from '../services/nativeBridge';
 
 export default function Watch() {
   const { type, movieId } = useParams<{ type: string; movieId: string }>();
@@ -131,7 +132,22 @@ export default function Watch() {
         
         setMetadata(item.meta);
         
-        // Priority 1: Direct File object (in-memory, e.g. after just scanning)
+        // Priority 1: Native Mobile Path (VLC Logic)
+        if (NativeBridge.isNative() && item.relativePath) {
+          // If relativePath is a full filesystem path (common in wrapped apps)
+          const nativeUrl = NativeBridge.getFileUrl({
+             name: item.filename,
+             path: item.relativePath,
+             size: 0,
+             type: 'video',
+             lastModified: item.addedAt || 0
+          });
+          setVideoSrc(nativeUrl);
+          setLoading(false);
+          return;
+        }
+
+        // Priority 2: Direct File object (in-memory, e.g. after just scanning)
         if (item.file) {
           const url = URL.createObjectURL(item.file);
           setVideoSrc(url);

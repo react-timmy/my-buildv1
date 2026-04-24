@@ -44,12 +44,11 @@ export default function Login() {
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-brand-orange/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-brand-blue/20 rounded-full blur-[120px] pointer-events-none" />
       
-      <div className="absolute top-8 left-8 z-20 scale-[1.5] md:scale-[2.0] origin-top-left">
-        <FilmSortLogo />
-      </div>
-
       <div className="w-full max-w-md relative z-10">
         <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl p-10 shadow-2xl">
+          <div className="flex justify-center mb-8">
+            <FilmSortLogo />
+          </div>
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold tracking-tight text-white mb-2">Welcome back</h1>
             <p className="text-sm text-white/40 font-medium">Enter your credentials to continue</p>

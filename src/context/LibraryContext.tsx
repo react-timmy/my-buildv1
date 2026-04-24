@@ -3,6 +3,7 @@ import { LibraryItem, LibraryGroup, groupLibrary, fetchTMDBMetadata } from '../s
 import { identifyMediaBatch } from '../services/geminiService';
 import { useAuth } from './AuthContext';
 import axios from '../lib/axios';
+import { NativeBridge, NativeMediaFile } from '../services/nativeBridge';
 
 interface ScanProgress {
   phase: 'idle' | 'scanning' | 'identifying' | 'metadata' | 'complete';
@@ -60,6 +61,8 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isInitialSyncing, setIsInitialSyncing] = useState(true);
   const [scanProgress, setScanProgress] = useState<ScanProgress>({ phase: 'idle', current: 0, total: 0 });
   const [toasts, setToasts] = useState<any[]>([]);
+  const isNative = NativeBridge.isNative();
+  const isSyncingRef = React.useRef(false); // Guard to prevent saves during fetch
   const initializedProfileId = React.useRef<string | null | undefined>(undefined);
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const syncTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,23 +86,39 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const syncWithVaultContents = useCallback(async () => {
     if (authLoading) return;
     
-    const profileId = activeProfile?.id || (activeProfile as any)?._id || 'guest';
+    const profileId = activeProfile?.id || (activeProfile as any)?._id;
+    if (!profileId || profileId === 'guest') {
+      setIsInitialSyncing(false);
+      return;
+    }
     
     setIsInitialSyncing(true);
+    isSyncingRef.current = true;
     
     try {
-      if (profileId) {
-        const res = await axios.get(`/auth/profiles/${profileId}/sync`);
-        if (res.data.library) {
-          setLibrary(res.data.library);
-        }
+      const res = await axios.get(`/auth/profiles/${profileId}/sync`);
+      if (res.data.library) {
+        setLibrary(res.data.library);
       }
+      initializedProfileId.current = profileId;
     } catch (e) {
       console.error("[LibrarySync] Fatal sync error", e);
     } finally {
       setIsInitialSyncing(false);
+      // Short delay to let the 'library' state settle before allowing saves
+      setTimeout(() => {
+        isSyncingRef.current = false;
+      }, 500);
     }
   }, [activeProfile?.id, authLoading]);
+
+  // Handle Profile Switch: Clear state immediately
+  useEffect(() => {
+    if (activeProfile?.id !== initializedProfileId.current) {
+        setLibrary([]);
+        initializedProfileId.current = undefined;
+    }
+  }, [activeProfile?.id]);
   
   useEffect(() => {
     syncWithVaultContents();
@@ -107,13 +126,13 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Persistent Save Effect - ATOMIC & PROTECTED
   useEffect(() => {
-    // CRITICAL: Do NOT save during sync or before initialization
-    if (!initializedProfileId.current || isInitialSyncing) return;
+    // CRITICAL: Prevent saving if we are in the middle of a profile fetch
+    if (!initializedProfileId.current || isInitialSyncing || isSyncingRef.current) return;
     
     const profileId = activeProfile?.id || (activeProfile as any)?._id;
 
     // Cloud Proxy Sync (Debounced)
-    if (profileId) {
+    if (profileId && initializedProfileId.current === profileId) {
       if (syncTimer.current) clearTimeout(syncTimer.current);
       syncTimer.current = setTimeout(() => {
         axios.post(`/auth/profiles/${profileId}/sync`, { library })
@@ -319,6 +338,25 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const pickFiles = async () => {
     try {
+      if (isNative) {
+        setScanProgress({ phase: 'scanning', current: 0, total: 0, label: 'Scanning local storage...' });
+        setIsScanning(true);
+        const nativeFiles = await NativeBridge.requestMediaAccess();
+        if (nativeFiles.length > 0) {
+          const normalized = nativeFiles.map(nf => ({
+            filename: nf.name,
+            file: (nf.blob || new File([], nf.name)) as File, 
+            relativePath: nf.path,
+            handle: undefined
+          }));
+          await processItems(normalized);
+        } else {
+          setIsScanning(false);
+          addToast('No media found on device library.', 'info');
+        }
+        return;
+      }
+
       // If we're in an iframe, showOpenFilePicker might be restricted by browser policy
       // regardless of whether it "exists" in window.
       if (!('showOpenFilePicker' in window)) {

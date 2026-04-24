@@ -265,14 +265,13 @@ export default function Browse({ type = 'all' }: { type?: 'all' | 'movie' | 'tv'
       {/* Cinematic Hero Stage */}
       <section className="relative w-full flex flex-col items-center justify-start z-10 pt-20 px-2 md:px-4 transition-all">
         {/* Top Header Spot */}
-        <div className="absolute top-8 left-5 md:left-7 z-50 scale-[1.5] md:scale-[2.0] origin-top-left pointer-events-auto hidden md:block">
-            <FilmSortLogo onClick={() => navigate('/browse')} />
-        </div>
-        <div className="absolute top-8 left-5 md:left-7 z-50 scale-[1.5] md:scale-[2.0] origin-top-left pointer-events-auto md:hidden">
-            <FilmSortLogo onClick={() => navigate('/browse')} />
+        <div className="absolute top-4 left-2 md:left-4 z-50 h-12 flex items-center pointer-events-auto">
+            <div className="scale-125 origin-left">
+              <FilmSortLogo onClick={() => navigate('/browse')} />
+            </div>
         </div>
         
-        <div className="absolute top-8 right-2 md:right-4 z-50 flex items-center gap-3 md:gap-4">
+        <div className="absolute top-4 right-4 md:right-6 z-50 flex items-center gap-3 md:gap-4 pointer-events-auto">
           
           {/* Browse Dropdown */}
           <div className="relative" ref={dropdownRef}>

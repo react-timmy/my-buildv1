@@ -153,7 +153,7 @@ const Library: React.FC = () => {
 
   return (
     <div 
-      className="min-h-screen bg-[#050505] selection:bg-brand-orange/30 pt-6"
+      className="min-h-screen bg-[#050505] selection:bg-brand-orange/30 pt-4"
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
@@ -178,25 +178,11 @@ const Library: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <div className="max-w-7xl mx-auto px-6 md:px-12 pb-32">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 pb-32">
         {/* Header Section */}
-        <div className="flex flex-col gap-6 mb-10">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="flex items-center gap-6">
-              <div className="w-16 h-16 bg-white flex items-center justify-center rounded-3xl shadow-[0_0_40px_rgba(255,255,255,0.1)]">
-                <Database className="w-8 h-8 text-black" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <h1 className="text-5xl font-black text-white tracking-tighter leading-none">Library</h1>
-                <div className="flex items-center gap-3 text-white/50 text-[10px] font-black uppercase tracking-[0.3em]">
-                  <Link to="/browse" className="hover:text-white transition-colors">Home</Link>
-                  <ChevronRight className="w-3 h-3" />
-                  <span className="text-white">All Items</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4 w-full md:w-auto">
+        <div className="flex flex-col gap-4 mb-8">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4 w-full md:w-auto order-2 md:order-1">
               <div className="relative flex-1 md:w-80">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                 <input 
@@ -248,98 +234,13 @@ const Library: React.FC = () => {
 
             <div className="flex items-center gap-8">
               <div className="flex items-center gap-4">
-                 <button 
-                  onClick={() => setShowVaultDetails(!showVaultDetails)}
-                  className={`p-3 rounded-xl border transition-all ${showVaultDetails ? 'bg-brand-blue/10 border-brand-blue text-brand-blue' : 'glass-card border-white/5 text-white/50 hover:text-white'}`}
-                >
-                  <Activity className="w-5 h-5" />
-                </button>
-                <div className="flex flex-col items-end gap-1">
-                   <div className="flex items-center gap-3">
-                     <div className={`w-2 h-2 rounded-full ${isScanning ? 'bg-brand-orange animate-pulse' : 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]'}`} />
-                     <span className="text-[10px] font-black text-white uppercase tracking-widest">
-                       {activeProfile?.name || 'Authorized'} // {isScanning ? 'Updating' : 'Ready'}
-                     </span>
-                   </div>
-                   <div className="flex items-center gap-3 text-white/40 text-[9px] font-medium uppercase tracking-widest">
-                      <span>{groups.length} Total Nodes</span>
-                   </div>
-                </div>
               </div>
             </div>
           </div>
         </div>
 
         {/* Diagnostic Logs Plate (Conditionally visible below tabs) */}
-        <AnimatePresence>
-          {showVaultDetails && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="mb-16 glass-card rounded-3xl border-brand-blue/20 bg-brand-blue/[0.02] overflow-hidden"
-            >
-              <div className="p-10">
-                <div className="flex items-center gap-4 mb-8">
-                  <div className="p-3 bg-brand-blue/10 rounded-2xl">
-                    <Activity className="w-6 h-6 text-brand-blue" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-white tracking-tight">System Status</h3>
-                    <p className="text-white/20 text-[9px] font-black uppercase tracking-widest">General Information</p>
-                  </div>
-                </div>
-
-                <div className="font-medium text-[10px] text-brand-blue/60 leading-loose uppercase space-y-4">
-                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
-                    <span className="text-white/20">Pointer Integrity...</span>
-                    <span className="font-black text-green-500 flex items-center gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                      SECURE
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
-                    <span className="text-white/20">Cloud Library Sync...</span>
-                    <div className="flex items-center gap-4">
-                      <span className="text-white tabular-nums">ONLINE</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
-                    <span className="text-white/20">Node Status...</span>
-                    <span className="text-brand-orange">PHANTOM [ZERO_STORAGE]</span>
-                  </div>
-                  <div className="flex justify-between gap-12 mt-12">
-                    <div className="flex-1 p-6 bg-white/5 rounded-2xl border border-white/5 hover:border-brand-blue/30 transition-all group">
-                      <h4 className="text-brand-blue font-black mb-2 flex items-center gap-2">
-                         <Star className="w-3 h-3" />
-                         Media Node
-                      </h4>
-                      <p className="font-sans italic text-sm text-white/40 normal-case leading-relaxed">
-                        This device is connected to your media server, providing instant, server-side playback.
-                      </p>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      <button 
-                        onClick={() => relinkLibrary()}
-                        className="px-6 py-4 rounded-xl border border-white/5 text-white/40 hover:text-white hover:border-white/20 transition-all flex items-center gap-3 text-[9px] font-black"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                        SYSTEM RE-SYNC
-                      </button>
-                      <button 
-                         onClick={() => setIsCleaning(true)}
-                         className="px-6 py-4 rounded-xl border border-red-500/20 text-red-500/40 hover:text-red-500 hover:bg-red-500/5 transition-all flex items-center gap-3 text-[9px] font-black"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        PURGE NODE
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Removed per user request */}
 
         {/* Media Grid Section */}
         <section className="space-y-20">
@@ -498,7 +399,7 @@ const Library: React.FC = () => {
               </div>
 
               {(filteredMovies.length === 0 && filteredTV.length === 0) && (
-                 <div className="text-center py-40 glass-card rounded-[3rem] border border-white/10">
+                 <div className="text-center py-20 glass-card rounded-[3rem] border border-white/10">
                     <Search className="w-16 h-16 text-white/20 mx-auto mb-6" />
                     <h3 className="text-2xl font-black text-white/70 tracking-tighter uppercase tracking-[0.2em]">Your collection is empty</h3>
                     <p className="text-white/40 text-xs mt-4 font-bold tracking-widest uppercase">Add your movie and show files to get started</p>

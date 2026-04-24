@@ -46,20 +46,20 @@ const MobileLayout: React.FC = () => {
 
       {/* Solid Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 w-full z-50 bg-[#0a0a0a]/85 backdrop-blur-3xl border-t border-white/10 pb-safe">
-        <div className="w-full flex justify-around items-center h-20 md:hidden">
+        <div className="w-full flex justify-around items-center h-16 md:hidden">
           {navItems.map(({ path, icon: Icon, label }) => (
             <NavLink
               key={path}
               to={path}
               className={({ isActive }) => `
-                relative flex flex-col items-center justify-center gap-1.5 transition-all duration-300 w-full h-full group
+                relative flex flex-col items-center justify-center gap-1 transition-all duration-300 w-full h-full group
                 ${isActive ? 'text-brand-orange' : 'text-white/40'}
               `}
             >
               {({ isActive }) => (
                 <>
                   {path === '/account' ? (
-                    <div className={`w-7 h-7 rounded-full overflow-hidden border-2 transition-all duration-500 flex-shrink-0 ${isActive ? 'border-brand-orange scale-110' : 'border-transparent opacity-70 scale-100'}`}>
+                    <div className={`w-5 h-5 rounded-full overflow-hidden border-2 transition-all duration-500 flex-shrink-0 ${isActive ? 'border-brand-orange scale-110' : 'border-transparent opacity-70 scale-100'}`}>
                       <img 
                         src={activeProfile?.avatarUrl || 'https://upload.wikimedia.org/wikipedia/commons/0/0b/Netflix-avatar.png'} 
                         alt="Profile" 
@@ -67,13 +67,13 @@ const MobileLayout: React.FC = () => {
                       />
                     </div>
                   ) : (
-                    <Icon className={`w-7 h-7 transition-all duration-500 ${isActive ? 'scale-110 text-brand-orange' : 'scale-100'}`} />
+                    <Icon className={`w-5 h-5 transition-all duration-500 ${isActive ? 'scale-110 text-brand-orange' : 'scale-100'}`} />
                   )}
-                  <span className={`text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${isActive ? 'opacity-100 text-brand-orange' : 'opacity-50'}`}>{label}</span>
+                  <span className={`text-[8px] font-black uppercase tracking-widest transition-all duration-300 ${isActive ? 'opacity-100 text-brand-orange' : 'opacity-50'}`}>{label}</span>
                   {isActive && (
                     <motion.div 
                       layoutId="nav-active"
-                      className="absolute -top-px w-10 h-[3px] bg-brand-orange shadow-[0_0_15px_#ff6b00] rounded-full" 
+                      className="absolute -top-px w-6 h-[2px] bg-brand-orange shadow-[0_0_10px_#ff6b00] rounded-full" 
                     />
                   )}
                 </>

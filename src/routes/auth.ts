@@ -24,7 +24,7 @@ export const authenticateToken = (req: any, res: any, next: any) => {
 
 router.post('/register', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, profileName, avatarUrl } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required' });
@@ -41,7 +41,10 @@ router.post('/register', async (req, res) => {
       email,
       passwordHash: hashedPassword,
       profiles: [
-        { name: 'User', avatarUrl: 'https://upload.wikimedia.org/wikipedia/commons/0/0b/Netflix-avatar.png' }
+        { 
+          name: profileName || 'User', 
+          avatarUrl: avatarUrl || 'https://upload.wikimedia.org/wikipedia/commons/0/0b/Netflix-avatar.png' 
+        }
       ]
     });
 

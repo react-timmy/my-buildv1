@@ -39,7 +39,7 @@ export default function Search() {
   const displayList = query.trim() ? results : recommendations;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-brand-orange/30 px-6 pt-12 pb-20">
+    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-brand-orange/30 px-4 md:px-8 pt-4 pb-20">
       {selectedItem && (
         <LibraryModal 
           item={selectedItem} 
@@ -48,16 +48,16 @@ export default function Search() {
       )}
 
       {/* Hero Header */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-12">
-        <div className="flex items-center gap-6">
-          <div className="w-16 h-16 bg-white flex items-center justify-center rounded-3xl shadow-[0_0_40px_rgba(255,255,255,0.1)] flex-shrink-0">
-            <SearchIcon className="w-8 h-8 text-black" strokeWidth={3} />
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-end gap-4 mb-8">
+        <div className="flex items-center gap-3 text-right">
+          <div className="w-10 h-10 bg-white flex items-center justify-center rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.1)] flex-shrink-0">
+            <SearchIcon className="w-5 h-5 text-black" strokeWidth={3} />
           </div>
           <div>
-            <h1 className="text-5xl font-black text-white tracking-tighter leading-none">Search</h1>
-            <div className="flex items-center gap-3 mt-4 text-white/30 text-[10px] font-black uppercase tracking-[0.3em]">
+            <h1 className="text-xl font-black text-white tracking-tighter leading-none">Search</h1>
+            <div className="flex items-center justify-end gap-2 mt-1.5 text-white/30 text-[7px] font-black uppercase tracking-[0.3em]">
               <Link to="/browse" className="hover:text-white transition-colors">Home</Link>
-              <ChevronRight className="w-3 h-3" />
+              <ChevronRight className="w-2.5 h-2.5" />
               <span className="text-white">Explore</span>
             </div>
           </div>

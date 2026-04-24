@@ -64,18 +64,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const normalizedProfiles = normalizeProfiles(userData.profiles || []);
       setProfiles(normalizedProfiles);
       
-      // Hydrate active profile
-      const savedId = localStorage.getItem('activeProfileId');
-      if (savedId && normalizedProfiles.length > 0) {
-        const found = normalizedProfiles.find((p: any) => p.id === savedId || p._id === savedId);
-        if (found) setActiveProfileState(found);
-        else setActiveProfileState(normalizedProfiles[0]);
-      } else if (normalizedProfiles.length > 0) {
+      // Always set the first profile as active if it exists
+      if (normalizedProfiles.length > 0) {
         setActiveProfileState(normalizedProfiles[0]);
+      } else {
+        setActiveProfileState(null);
       }
     } catch (error) {
       setUser(null);
       setProfiles([]);
+      setActiveProfileState(null);
     } finally {
       setLoading(false);
     }

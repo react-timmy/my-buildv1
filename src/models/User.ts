@@ -19,6 +19,7 @@ const LibraryItemSchema = new Schema({
     backdrop: String,
     overview: String,
     rating: Number,
+    logo: String,
     genres: [String],
     tmdbId: Number,
     folderName: String,
@@ -30,8 +31,11 @@ const LibraryItemSchema = new Schema({
 const ProfileSchema = new Schema({
   name: String,
   avatarUrl: String,
-  isKids: Boolean,
-  library: [LibraryItemSchema]
+  isKids: { type: Boolean, default: false },
+  library: [LibraryItemSchema],
+  myList: [Schema.Types.Mixed],
+  likedMovies: [Schema.Types.Mixed],
+  watching: [Schema.Types.Mixed]
 });
 
 const UserSchema = new Schema({

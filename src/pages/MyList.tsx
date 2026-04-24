@@ -40,7 +40,7 @@ export default function MyList() {
   };
 
   return (
-    <div className="min-h-screen bg-transparent px-6 pt-12">
+    <div className="min-h-screen bg-transparent px-4 md:px-8 pt-4">
       {selectedItem && (
         <LibraryModal 
           item={selectedItem} 
@@ -48,20 +48,8 @@ export default function MyList() {
         />
       )}
 
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-16">
-        <div className="flex items-center gap-6">
-          <div className="w-16 h-16 bg-white flex items-center justify-center rounded-3xl shadow-[0_0_40px_rgba(255,255,255,0.1)] flex-shrink-0">
-            <Bookmark className="w-8 h-8 text-black" fill="currentColor" />
-          </div>
-          <div>
-            <h1 className="text-5xl font-black text-white tracking-tighter leading-none">Favorites</h1>
-            <div className="flex items-center gap-3 mt-4 text-white/30 text-[10px] font-black uppercase tracking-[0.3em]">
-              <Link to="/browse" className="hover:text-white transition-colors">Home</Link>
-              <ChevronRight className="w-3 h-3" />
-              <span className="text-white">Lists & Liked</span>
-            </div>
-          </div>
-        </div>
+
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-end gap-4 mb-8 pr-4">
       </div>
 
       {hasContent ? (
